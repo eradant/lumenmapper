@@ -155,6 +155,8 @@ details.fold[open]>summary::after{content:'\2013'}
 #meter{width:100%;height:52px;display:block;background:var(--stage);border:1px solid var(--line);border-radius:6px}
 .react{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)}
 .react .rng{grid-column:1/-1}
+.schip.pend{border-color:var(--cyan);color:var(--cyan)}
+.tdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--lamp);opacity:.15;margin-right:6px;vertical-align:-1px}
 textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-size:2}
 .err{font:400 11px/1.45 var(--f-mono);color:var(--warn);white-space:pre-wrap;word-break:break-word}
 .err:empty{display:none}
@@ -177,6 +179,7 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
   <button class="icon" id="redo" title="Redo (Ctrl+Shift+Z)">↷</button>
   <span class="sep"></span>
   <button id="testBtn" title="Show the alignment grid on every surface (G)">Test grid</button>
+  <button id="alignBtn" title="Show outlines and the selected corner on the projector (A)">Align on output</button>
   <button id="blackBtn" title="Black out all output (B)">Blackout</button>
   <select id="outSize" title="Projector resolution" style="width:auto"></select>
   <span class="sep"></span>
@@ -201,8 +204,25 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="note" id="aName"></div>
       <div class="grid2"><label for="aGain">Sensitivity</label><div class="rng"><input type="range" id="aGain" min="0.2" max="4" step="0.05"><output></output></div></div>
       <canvas id="meter" aria-label="Audio levels"></canvas>
+      <div class="grid2" id="aDevRow" hidden><label for="aDev">Input</label><select id="aDev"></select></div>
       <div class="note">Choose what each surface does with the sound under Audio reaction in its properties.</div>
     </div>
+  </details>
+  <details class="fold" id="tempoFold">
+    <summary><span class="lbl">Tempo</span></summary>
+    <div class="fold-body">
+      <div class="seg" id="tOn"><button data-ton="0">Off</button><button data-ton="1">On</button></div>
+      <div class="grid2">
+        <label for="tBpm">BPM</label><input type="number" id="tBpm" min="30" max="300" step="0.1">
+        <label>Scene go</label><div class="seg" id="tQuant"><button data-q="off" title="Change scenes straight away">Now</button><button data-q="beat" title="Wait for the next beat">Beat</button><button data-q="bar" title="Wait for the next bar of 4">Bar</button></div>
+      </div>
+      <div class="row"><button id="tTap">Tap (T)</button><button id="tSync" title="Make this moment beat 1 of the bar">Downbeat</button></div>
+      <div class="note">Tap along to set the tempo. Use Tempo pulse in a surface's Audio reaction, or uTempo, uTempoPulse and uBar in custom shaders.</div>
+    </div>
+  </details>
+  <details class="fold" id="midiFold">
+    <summary><span class="lbl">MIDI control</span></summary>
+    <div class="fold-body" id="midiBody"></div>
   </details>
   <details class="fold">
     <summary><span class="lbl">Editor view</span></summary>
@@ -227,6 +247,7 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div>Scroll to zoom · <kbd>Space</kbd>+drag to pan · <kbd>0</kbd> fit</div>
       <div><kbd>Del</kbd> remove mask point · <kbd>Alt</kbd>+click too</div>
       <div><kbd>X</kbd> X-ray · <kbd>G</kbd> test grid · <kbd>B</kbd> blackout</div>
+      <div><kbd>A</kbd> align on output · <kbd>T</kbd> tap tempo</div>
       <div><kbd>O</kbd> output window · <kbd>H</kbd> this screen</div>
       <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate</div>
     </div>
@@ -241,6 +262,7 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
     <button id="sceneAdd" title="Save the current look as a new scene">+ Scene</button>
     <button id="scenePlay" title="Step through scenes that have a hold time (P)">▶ Play</button>
     <button id="sceneEditBtn">Scene settings</button>
+    <button id="sceneTap" title="Tap tempo (T)"><span class="tdot" id="tapDot"></span><span id="tapBpm">Tap</span></button>
     <span class="bar-gap"></span>
     <label class="master" for="master">Master<input type="range" id="master" min="0" max="1" step="0.01"></label>
   </div>
@@ -300,6 +322,7 @@ const DEFAULT_CODE=`// Write  vec3 shade(vec2 uv, vec2 p, float t)
 // uv: 0..1 across the surface   p: centred, aspect-correct   t: time
 // You can use u_c1, u_c2 (colors), u_a, u_b, u_c (sliders 0..1)
 // and the audio values uLevel, uBass, uMid, uTreble, uBeat (0..1).
+// Tempo panel: uTempo (0..1 ramp each beat), uTempoPulse, uBar (beat 0..3).
 // Or paste a single-pass Shadertoy shader that has mainImage().
 vec3 shade(vec2 uv, vec2 p, float t){
   float r = length(p);
@@ -404,7 +427,7 @@ const SHADERS=[
    float bl=step(.93,hash(floor(p*6.)))*(1.-smoothstep(0.,.12,length(fract(p*6.)-.5)))*tr;
    float inside=step(r,R); return u_c1*(tr*.85+rg*.35+cl*.25+bl*1.5+.04)*inside;}`},
 
- {id:'media',name:'Image / video',cat:'Media',params:[S('fit','Fit',['Stretch','Cover','Contain'],0),C('c1','Bar color','#000000')],
+ {id:'media',name:'Image / video / live',cat:'Media',params:[S('fit','Fit',['Stretch','Cover','Contain'],0),C('c1','Bar color','#000000')],
   code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 c=uv; float sa=uAspect, ta=uTexAspect;
    if(u_fit>.5&&u_fit<1.5){ if(ta>sa) c.x=(c.x-.5)*sa/ta+.5; else c.y=(c.y-.5)*ta/sa+.5; }
    else if(u_fit>1.5){ if(ta>sa) c.y=(c.y-.5)*ta/sa+.5; else c.x=(c.x-.5)*sa/ta+.5;
@@ -430,6 +453,7 @@ const HEAD=`precision highp float;
 varying vec2 vUV; varying vec2 vOut;
 uniform float uTime,uAspect,uGeoAspect,uTexAspect,uBright,uOpac,uFeather,uRot,uHasMask,uXray; uniform vec2 uFlip; uniform vec4 uRad;
 uniform sampler2D uTex; uniform sampler2D uMask; uniform float uLevel,uBass,uMid,uTreble,uBeat;
+uniform float uTempo,uTempoPulse,uBar,uSpace;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 vec2 hash2(vec2 p){float n=hash(p);return vec2(n,hash(p+n+.17));}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
@@ -448,7 +472,7 @@ void main(){
  float rmax=max(max(uRad.x,uRad.y),max(uRad.z,uRad.w));
  float inside=rmax>0.?1.-smoothstep(-.0015,.0015,d):1.;
  if(inside<=0.) discard;
- vec2 c=uv; if(uFlip.x>.5)c.x=1.-c.x; if(uFlip.y>.5)c.y=1.-c.y;
+ vec2 c=uSpace>.5?vOut:uv; if(uFlip.x>.5)c.x=1.-c.x; if(uFlip.y>.5)c.y=1.-c.y;
  if(uRot>.5&&uRot<1.5)c=vec2(c.y,1.-c.x); else if(uRot>1.5&&uRot<2.5)c=1.-c; else if(uRot>2.5)c=vec2(1.-c.y,c.x);
  vec2 p=(c-.5)*vec2(uAspect,1.);
  vec3 col=shade(c,p,uTime);
@@ -471,7 +495,7 @@ function customSrc(code){const toy=/\bmainImage\s*\(/.test(code),pre=HEAD+declFo
   return {src:pre+code+(toy?TOY_POST:'')+MAIN,off:pre.split('\n').length-1}}
 const hashStr=t=>{let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36)+'_'+t.length};
 const customErr=new Map();
-const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat'];
+const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace'];
 const hex=h=>{h=String(h||'#000000');return [1,3,5].map(i=>(parseInt(h.substr(i,2),16)||0)/255)};
 
 /* =====================================================================
@@ -539,24 +563,26 @@ function shiftItem(it,dx,dy,orig){
 /* =====================================================================
    STATE
    ===================================================================== */
-let project=null,selKind='s',sel=0,selPt=-1,testGrid=false,blackout=false,xray=false,bgHidden=false;
+let project=null,selKind='s',sel=0,selPt=-1,testGrid=false,blackout=false,xray=false,bgHidden=false,align=false;
 const mediaCache=new Map();   // mediaId -> {el,video,ready,aspect,name}
 const phases=new Map();       // surfaceId -> {t0,p0}  (keeps animation continuous when speed changes)
 const audioPhase=new Map();   // surfaceId -> extra phase added by sound-driven speed
 
 function surfaceDefaults(name,pts,shader='grid'){
   return {id:uid('s'),name,pts,shader,params:{},mediaId:null,speed:1,bright:1,opac:1,feather:0,rot:0,flipX:false,flipY:false,visible:true,
-    warp:'quad',mesh:null,round:[0,0,0,0],roundLinked:true,reactions:[]};
+    warp:'quad',mesh:null,round:[0,0,0,0],roundLinked:true,reactions:[],space:'surface'};
 }
 function maskDefaults(name,pts,mode='hide',target='all'){return {id:uid('k'),name,pts,mode,target,feather:0,round:0,visible:true}}
 function normSurface(s){
   s.params=s.params||{};s.warp=s.warp||'quad';if(s.warp==='mesh'&&!s.mesh)s.warp='quad';
   s.round=Array.isArray(s.round)&&s.round.length===4?s.round:[0,0,0,0];if(s.roundLinked===undefined)s.roundLinked=true;if(!Array.isArray(s.reactions))s.reactions=[];
+  if(s.space!=='output')s.space='surface';
   paramsOf(s);return s;
 }
 function normProject(p){
   p.output=p.output||{w:1920,h:1080};p.surfaces=(p.surfaces||[]).map(normSurface);p.masks=p.masks||[];
-  p.bg=Object.assign({mediaId:null,opacity:.5},p.bg||{});p.scenes=p.scenes||[];p.audio=Object.assign({mediaId:null,gain:1},p.audio||{});if(p.master==null)p.master=1;return p;
+  p.bg=Object.assign({mediaId:null,opacity:.5},p.bg||{});p.scenes=p.scenes||[];p.audio=Object.assign({mediaId:null,gain:1},p.audio||{});if(p.master==null)p.master=1;
+  p.tempo=Object.assign({on:false,bpm:120,quant:'off'},p.tempo||{});p.midi=Object.assign({maps:[]},p.midi||{});return p;
 }
 function paramsOf(s,id=s.shader){
   const def=SH[id];if(!def) return {};
@@ -624,6 +650,7 @@ async function saveNow(){
 }
 
 async function loadMedia(id){
+  if(isLive(id)) return loadLive(id,false);
   if(!id||mediaCache.has(id)) return;
   const rec=await store.get('media',id);if(!rec) return;
   const url=URL.createObjectURL(rec.blob),m={name:rec.name,video:rec.type.startsWith('video'),ready:false,aspect:1,url};
@@ -638,6 +665,31 @@ async function addMediaFile(file){
   await store.put('media',{id,name:file.name,type:file.type||'application/octet-stream',blob:file,created:Date.now()});
   await loadMedia(id);return id;
 }
+
+/* LIVE INPUTS  (camera / capture card, or a shared screen or window; ids 'live:cam:<deviceId>' and 'live:screen')
+   Cameras start on their own; screen sharing needs a click, so it waits until "Start screen share". */
+const isLive=id=>typeof id==='string'&&id.startsWith('live:');
+async function loadLive(id,gesture){
+  let m=mediaCache.get(id);if(m&&(m.ready||m.starting))return;
+  const screen=id==='live:screen';
+  if(!m){m={name:screen?'Screen share':'Camera',video:true,live:true,ready:false,aspect:16/9};mediaCache.set(id,m)}
+  if(screen&&!gesture){m.waiting=true;return}
+  if(m.waiting&&!gesture)return;
+  m.starting=true;m.waiting=false;m.error='';if(project)renderProps();
+  try{
+    const dev=id.slice(9),stream=screen?await navigator.mediaDevices.getDisplayMedia({video:{frameRate:60},audio:false})
+      :await navigator.mediaDevices.getUserMedia({audio:false,video:Object.assign({width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}},dev?{deviceId:{exact:dev}}:{})});
+    const v=document.createElement('video'),tr=stream.getVideoTracks()[0];v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=stream;
+    m.name=(tr&&tr.label)||m.name;
+    v.addEventListener('loadeddata',()=>{m.ready=true;m.aspect=v.videoWidth/v.videoHeight||16/9;if(project)renderProps()});
+    v.addEventListener('resize',()=>{m.aspect=v.videoWidth/v.videoHeight||m.aspect});
+    if(tr)tr.addEventListener('ended',()=>{if(m.stream!==stream)return;stopLive(id);if(!screen)m.error='Camera disconnected';if(project)renderProps()});
+    m.el=v;m.stream=stream;v.play().catch(()=>{});
+  }catch(e){m.waiting=true;m.error=e&&e.name==='NotAllowedError'?'Permission was blocked':'Could not start: '+(e&&e.message||e)}
+  m.starting=false;if(project)renderProps();
+}
+function stopLive(id){const m=mediaCache.get(id);if(!m)return;if(m.stream)m.stream.getTracks().forEach(t=>t.stop());m.stream=null;m.el=null;m.ready=false;m.waiting=true}
+function pruneLive(){const used=new Set(usedMedia(project));for(const [id,m] of [...mediaCache])if(m.live&&!used.has(id)){stopLive(id);mediaCache.delete(id)}}
 
 /* =====================================================================
    MASKS  (composited per surface on a 2D canvas, then sampled by the shader)
@@ -719,8 +771,11 @@ async function audioSet(mode){
     if(!AUD.ctx){AUD.ctx=new (window.AudioContext||window.webkitAudioContext)();AUD.an=AUD.ctx.createAnalyser();AUD.an.fftSize=2048;AUD.an.smoothingTimeConstant=.5;AUD.freq=new Uint8Array(AUD.an.frequencyBinCount)}
     await AUD.ctx.resume();
     if(mode==='mic'){
-      AUD.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
-      AUD.node=AUD.ctx.createMediaStreamSource(AUD.stream);AUD.node.connect(AUD.an);AUD.active=true;toast('Listening to the microphone');
+      const dev=ls.get('lumen-pin-adev')||'',ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+      try{AUD.stream=await navigator.mediaDevices.getUserMedia({audio:dev?Object.assign({deviceId:{exact:dev}},ac):ac})}
+      catch(e){if(!dev||e.name==='NotAllowedError')throw e;AUD.stream=await navigator.mediaDevices.getUserMedia({audio:ac})}
+      AUD.node=AUD.ctx.createMediaStreamSource(AUD.stream);AUD.node.connect(AUD.an);AUD.active=true;
+      const tr=AUD.stream.getAudioTracks()[0];toast('Listening to '+(tr&&tr.label||'the microphone'));fillAudioDevices();
     }else if(mode==='file'){
       const id=project.audio.mediaId;if(!id){toast('Choose a music file to start');renderAudio();return}
       await loadMedia(id);const m=mediaCache.get(id);if(!m||!m.el){toast('Could not load that music file');renderAudio();return}
@@ -747,24 +802,136 @@ function audioUpdate(dt,t){
 // sound-driven changes to a surface, worked out fresh every frame (nothing is saved)
 function effective(s,base,def){
   let bright=+s.bright,opac=+s.opac,prm=base;
-  if(AUD.active&&s.reactions&&s.reactions.length){prm=Object.assign({},base);
-    for(const r of s.reactions){const a=+r.amount||0,v=AUD.v[r.band]||0,x=a>=0?v:1-v,m=Math.abs(a);
+  if(s.reactions&&s.reactions.length){prm=Object.assign({},base);
+    for(const r of s.reactions){const v=bandVal(r.band);if(v==null)continue;const a=+r.amount||0,x=a>=0?v:1-v,m=Math.abs(a);
       if(r.target==='bright')bright*=1-m+m*x*1.6;
       else if(r.target==='opac')opac*=clamp(1-m+m*x,0,1);
       else if(r.target!=='speed'){const d=def.params.find(q=>q.k===r.target&&q.t==='range');if(d)prm[r.target]=clamp(+prm[r.target]+a*v*(d.max-d.min),d.min,d.max)}}}
   return {bright,opac,prm};
 }
 function audioSpeed(dt){
-  if(!AUD.active||!project)return;
-  for(const s of project.surfaces){let b=0;for(const r of s.reactions||[])if(r.target==='speed')b+=(+r.amount||0)*(AUD.v[r.band]||0)*4;
+  if(!project)return;
+  for(const s of project.surfaces){let b=0;for(const r of s.reactions||[])if(r.target==='speed')b+=(+r.amount||0)*(bandVal(r.band)||0)*4;
     if(b)audioPhase.set(s.id,(audioPhase.get(s.id)||0)+b*dt)}
 }
-const BANDS=[['level','Level'],['bass','Bass'],['mid','Mids'],['treble','Highs'],['beat','Beat']];
+const BANDS=[['level','Level'],['bass','Bass'],['mid','Mids'],['treble','Highs'],['beat','Beat'],['tempo','Tempo pulse']];
+// value of a reaction source right now, or null when that source is off
+function bandVal(b){if(b==='tempo')return project&&project.tempo.on?TEMPO.pulse:null;return AUD.active?AUD.v[b]||0:null}
+async function fillAudioDevices(){
+  const el=$('aDev');if(!el)return;let devs=[];
+  try{devs=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput'&&d.deviceId)}catch(e){}
+  const cur=ls.get('lumen-pin-adev')||'';
+  el.innerHTML=`<option value="">System default</option>`+devs.filter(d=>d.deviceId!=='default').map((d,i)=>`<option value="${esc(d.deviceId)}"${d.deviceId===cur?' selected':''}>${esc(d.label||'Input '+(i+1))}</option>`).join('');
+}
+
+/* =====================================================================
+   TEMPO  (tap tempo clock; scene changes can wait for the next beat or bar)
+   ===================================================================== */
+const TEMPO={beat:0,pulse:0,bar:0,t0:0,taps:[]};
+let pendingGo=null;
+const tempoPhase=t=>(t-TEMPO.t0)*project.tempo.bpm/60;
+function tempoUpdate(t){
+  const tp=project.tempo;
+  if(!tp.on){TEMPO.beat=TEMPO.pulse=TEMPO.bar=0}
+  else{const ph=tempoPhase(t),i=Math.floor(ph),f=ph-i;TEMPO.beat=f;TEMPO.pulse=Math.exp(-f*6);TEMPO.bar=((i%4)+4)%4}
+  if(pendingGo&&(!tp.on||t>=pendingGo.at)){const i=pendingGo.i;pendingGo=null;goScene(i);renderScenes()}
+}
+function tapTempo(){
+  const t=now(),T=TEMPO.taps,tp=project.tempo;
+  if(T.length&&t-T[T.length-1]>2)T.length=0;
+  T.push(t);if(T.length>8)T.shift();TEMPO.n=T.length===1?1:(TEMPO.n||1)+1;
+  if(T.length>=2)tp.bpm=Math.round(clamp(60*(T.length-1)/(T[T.length-1]-T[0]),30,300)*10)/10;
+  tp.on=true;TEMPO.t0=t-(TEMPO.n-1)*60/tp.bpm;  // the first tap of a run is beat 1
+  renderTempo();scheduleSave();
+}
+function nextBoundary(t){
+  const tp=project.tempo;if(!tp.on||tp.quant==='off')return t;
+  const per=tp.quant==='bar'?4:1,x=tempoPhase(t)/per,f=x-Math.floor(x);
+  if(f<.08/per)return t;  // pressed just after the beat: treat it as on time
+  return TEMPO.t0+(Math.floor(x)+1)*per*60/tp.bpm;
+}
+// user-triggered scene change (buttons, keys, MIDI); waits for the beat when Tempo asks for it
+function cueScene(i){
+  if(!project.scenes[i])return;
+  const t=now(),at=nextBoundary(t);
+  if(at<=t){pendingGo=null;goScene(i);renderScenes();return}
+  pendingGo={i,at};renderScenes();
+}
+function renderTempo(){
+  if(!project)return;const tp=project.tempo;
+  document.querySelectorAll('#tOn [data-ton]').forEach(b=>b.classList.toggle('on',(b.dataset.ton==='1')===!!tp.on));
+  document.querySelectorAll('#tQuant [data-q]').forEach(b=>b.classList.toggle('on',b.dataset.q===tp.quant));
+  if(document.activeElement!==$('tBpm'))$('tBpm').value=tp.bpm;
+  $('tapBpm').textContent=tp.on?fmt(tp.bpm)+' BPM':'Tap';
+}
+
+/* =====================================================================
+   MIDI  (Web MIDI: learn a note or knob for each action)
+   ===================================================================== */
+const MIDI={access:null,learn:-1,held:new Map(),last:''};
+const MIDI_ACTIONS=[
+  {k:'scene',l:'Go to scene',arg:'scene'},{k:'next',l:'Next scene'},{k:'prev',l:'Previous scene'},{k:'play',l:'Play / stop'},
+  {k:'blackout',l:'Blackout on/off'},{k:'grid',l:'Test grid on/off'},{k:'tap',l:'Tap tempo'},
+  {k:'master',l:'Master level',fader:true},{k:'gain',l:'Audio sensitivity',fader:true},
+  {k:'sbright',l:'Surface brightness',arg:'surface',fader:true},{k:'svis',l:'Surface on/off',arg:'surface'}];
+const MIDI_ACT=Object.fromEntries(MIDI_ACTIONS.map(a=>[a.k,a]));
+const midiLabel=k=>k?(k[0]==='n'?'Note ':'CC ')+k.slice(k.indexOf(':')+1)+' · ch '+k.slice(1,k.indexOf(':')):'not set';
+async function midiConnect(silent){
+  if(!navigator.requestMIDIAccess){if(!silent)toast('This browser has no MIDI support. Try Chrome or Edge.');return}
+  try{MIDI.access=await navigator.requestMIDIAccess();ls.set('lumen-pin-midi','1');
+    const bind=()=>{MIDI.access.inputs.forEach(inp=>inp.onmidimessage=midiMsg);renderMidi()};
+    MIDI.access.onstatechange=bind;bind();if(!silent)toast('MIDI connected')}
+  catch(e){if(!silent)toast('MIDI access was blocked. Allow it in the browser’s site settings.')}
+}
+function midiMsg(e){
+  if(!project)return;
+  const st=e.data[0],d1=e.data[1],d2=e.data[2]||0,type=st&0xf0,ch=(st&0x0f)+1;let key,val,press;
+  if(type===0x90&&d2>0){key=`n${ch}:${d1}`;val=d2/127;press=true}
+  else if(type===0x80||type===0x90){key=`n${ch}:${d1}`;val=0;press=false}
+  else if(type===0xB0){key=`c${ch}:${d1}`;val=d2/127;press=d2>=64}
+  else return;
+  MIDI.last=midiLabel(key);const le=$('midiLast');if(le)le.textContent='Last received: '+MIDI.last;
+  if(MIDI.learn>=0&&(press||type===0xB0)){const m=project.midi.maps[MIDI.learn];MIDI.learn=-1;if(m)m.key=key;MIDI.held.set(key,press);renderMidi();scheduleSave();return}
+  const was=MIDI.held.get(key);MIDI.held.set(key,press);
+  for(const m of project.midi.maps){if(m.key!==key)continue;const A=MIDI_ACT[m.action];if(!A)continue;
+    if(A.fader)midiFader(m,val);else if(press&&!was)midiButton(m)}
+}
+function midiButton(m){
+  const s=()=>project.surfaces.find(x=>x.id===m.arg);
+  switch(m.action){
+    case 'scene':cueScene(+m.arg||0);break;case 'next':stepScene(1);break;case 'prev':stepScene(-1);break;
+    case 'play':togglePlay();break;case 'tap':tapTempo();break;
+    case 'blackout':blackout=!blackout;renderTop();break;case 'grid':testGrid=!testGrid;renderTop();break;
+    case 'svis':{const x=s();if(x){x.visible=!x.visible;renderList();scheduleSave()}break}
+  }
+}
+function midiFader(m,v){
+  if(m.action==='master'){project.master=v;$('master').value=v}
+  else if(m.action==='gain'){project.audio.gain=Math.round((.2+v*3.8)*100)/100;renderAudio()}
+  else if(m.action==='sbright'){const x=project.surfaces.find(q=>q.id===m.arg);if(!x)return;x.bright=v;
+    const el=$('cBright');if(el&&selKind==='s'&&project.surfaces[sel]===x){el.value=v;el.nextElementSibling.textContent=fmt(v)}}
+  scheduleSave();
+}
+function renderMidi(){
+  const P=$('midiBody');if(!P||!project)return;
+  if(!MIDI.access){P.innerHTML=`<div class="note">Run the show from a MIDI controller: pads for scenes and blackout, faders for master and surface brightness.</div><div class="row"><button id="midiConnect">Connect MIDI</button></div>`;return}
+  const ins=[];MIDI.access.inputs.forEach(i=>ins.push(i.name));
+  const argSel=(m,i)=>{const A=MIDI_ACT[m.action];if(!A||!A.arg)return '<span></span>';
+    const opts=A.arg==='scene'?project.scenes.map((sc,j)=>[String(j),(j+1)+'. '+sc.name]):project.surfaces.map(s=>[s.id,s.name]);
+    return `<select data-mx="${i}" data-mf="arg" aria-label="Which">${opts.map(([v,l])=>`<option value="${esc(v)}"${String(m.arg)===v?' selected':''}>${esc(l)}</option>`).join('')}</select>`};
+  P.innerHTML=`<div class="note">${ins.length?'Inputs: '+esc(ins.join(', ')):'No MIDI devices found. Plug one in.'}</div>
+  ${project.midi.maps.map((m,i)=>`<div class="react">
+    <select data-mx="${i}" data-mf="action" aria-label="Action">${MIDI_ACTIONS.map(a=>`<option value="${a.k}"${a.k===m.action?' selected':''}>${a.l}</option>`).join('')}</select>
+    ${argSel(m,i)}<button class="icon" data-mdel="${i}" title="Remove">✕</button>
+    <button data-mlearn="${i}" style="grid-column:1/-1" class="${MIDI.learn===i?'on':''}">${MIDI.learn===i?'Press a pad or move a knob…':'Learn · '+midiLabel(m.key)}</button></div>`).join('')}
+  <div class="row"><button id="midiAdd">+ Add mapping</button></div>
+  <div class="note" id="midiLast">${MIDI.last?'Last received: '+esc(MIDI.last):''}</div>`;
+}
 
 /* =====================================================================
    SCENES  (each scene stores every surface's look; shapes and masks are shared)
    ===================================================================== */
-const LOOK_KEYS=['shader','params','speed','bright','opac','feather','visible','mediaId','rot','flipX','flipY','reactions'];
+const LOOK_KEYS=['shader','params','speed','bright','opac','feather','visible','mediaId','rot','flipX','flipY','reactions','space'];
 let fadeState=null,playing=false,sceneStart=0;
 function captureLook(){const o={};project.surfaces.forEach(s=>{const l={};LOOK_KEYS.forEach(k=>l[k]=clone(s[k]??null));o[s.id]=l});return o}
 function curScene(){return project&&(project.scenes.find(x=>x.id===project.activeScene)||project.scenes[0])}
@@ -785,7 +952,7 @@ function goScene(i,instant,skipStore){
   fadeState=instant||!(+sc.fade>0)?null:{from,t0:t,dur:+sc.fade};
   hist=[snap()];redo=[];renderAll();if(!$('scenePanel').hidden)renderScenePanel();scheduleSave();
 }
-function stepScene(d){const i=project.scenes.findIndex(x=>x.id===project.activeScene);goScene(clamp(i+d,0,project.scenes.length-1))}
+function stepScene(d){const i=pendingGo?pendingGo.i:project.scenes.findIndex(x=>x.id===project.activeScene);cueScene(clamp(i+d,0,project.scenes.length-1))}
 function togglePlay(){playing=!playing;sceneStart=now();
   if(playing&&!project.scenes.some(x=>+x.hold>0))toast('Give scenes a Hold time in Scene settings so Play can move between them.');renderScenes()}
 function tickShow(t){
@@ -805,8 +972,10 @@ function drawList(t){
 function showKeys(e){
   if(e.key==='PageDown'){e.preventDefault();stepScene(1);return true}
   if(e.key==='PageUp'){e.preventDefault();stepScene(-1);return true}
-  if(e.shiftKey&&/^Digit[1-9]$/.test(e.code||'')){e.preventDefault();goScene(+e.code.slice(5)-1);return true}
-  if((e.key==='p'||e.key==='P')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){togglePlay();return true}
+  if(e.shiftKey&&/^Digit[1-9]$/.test(e.code||'')){e.preventDefault();cueScene(+e.code.slice(5)-1);return true}
+  if(e.ctrlKey||e.metaKey||e.altKey)return false;
+  if(e.key==='p'||e.key==='P'){togglePlay();return true}
+  if(e.key==='t'||e.key==='T'){tapTempo();return true}
   return false;
 }
 
@@ -893,7 +1062,8 @@ class Renderer{
       const id=o.testGrid?'grid':s.shader;
       let P=id==='custom'?this.customProg(paramsOf(s,'custom').code||''):this.prog(id),useId=id;if(!P){P=this.prog('solid');useId='solid';if(!P)return}
       const base=o.testGrid?{c1:PALETTE[i%PALETTE.length],c2:'#9aa6b2',cells:10}:paramsOf(s,useId),ef=o.testGrid?{bright:1,opac:1,prm:base}:effective(s,base,SH[useId]),prm=ef.prm,fo=s._fadeOpac??1,ms=o.master??1;
-      const g=geometry(s),u=P.u,asp=o.aspect?{geo:o.aspect,content:o.aspect}:aspects(s);
+      const g=geometry(s),u=P.u,span=!o.testGrid&&!o.aspect&&s.space==='output';let asp=o.aspect?{geo:o.aspect,content:o.aspect}:aspects(s);
+      if(span){const oa=project.output.w/project.output.h;asp={geo:asp.geo,content:(+s.rot)%2?1/oa:oa}}
       gl.useProgram(P.p);
       gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,g.data,gl.DYNAMIC_DRAW);this.attribs(this.vbo);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
@@ -907,6 +1077,7 @@ class Renderer{
       gl.uniform2f(u.uFlip,!o.testGrid&&s.flipX?1:0,!o.testGrid&&s.flipY?1:0);
       gl.uniform1f(u.uXray,o.xray?1:0);
       const av=AUD.v;gl.uniform1f(u.uLevel,av.level);gl.uniform1f(u.uBass,av.bass);gl.uniform1f(u.uMid,av.mid);gl.uniform1f(u.uTreble,av.treble);gl.uniform1f(u.uBeat,av.beat);
+      gl.uniform1f(u.uTempo,TEMPO.beat);gl.uniform1f(u.uTempoPulse,TEMPO.pulse);gl.uniform1f(u.uBar,TEMPO.bar);gl.uniform1f(u.uSpace,span?1:0);
       gl.activeTexture(gl.TEXTURE1);
       const mt=o.noMasks?null:this.maskTex(s);if(!mt)gl.bindTexture(gl.TEXTURE_2D,this.blank);
       gl.uniform1i(u.uMask,1);gl.uniform1f(u.uHasMask,mt?1:0);
@@ -958,7 +1129,8 @@ const toPx=p=>[VR.x+p[0]*VR.w,VR.y+p[1]*VR.h];
 
 function drawOverlay(){
   const dpr=ov.width/CW;octx.setTransform(dpr,0,0,dpr,0,0);octx.clearRect(0,0,CW,CH);
-  if(!project||document.body.classList.contains('output')) return;
+  if(!project) return;
+  if(document.body.classList.contains('output')){if(align)drawAlign(octx,CW,CH);return}
   octx.strokeStyle='#2f3740';octx.lineWidth=1;octx.strokeRect(VR.x-.5,VR.y-.5,VR.w+1,VR.h+1);
   const poly=(P,close=true)=>{octx.beginPath();P.forEach((p,k)=>{const[x,y]=toPx(p);k?octx.lineTo(x,y):octx.moveTo(x,y)});if(close)octx.closePath()};
   const label=(txt,P,col)=>{const c=P.reduce((a,p)=>[a[0]+p[0]/P.length,a[1]+p[1]/P.length],[0,0]),[cx,cy]=toPx(c);
@@ -995,6 +1167,24 @@ function drawOverlay(){
     }
     label(m.name+(m.mode==='show'?' · crop':' · cut'),m.pts,on?MASKC:'#b79ab0');
   });
+}
+
+// alignment guides drawn on the projected image itself: every outline, the selected item's handles,
+// and a full-screen crosshair through the selected point
+function drawAlign(ctx,w,h){
+  const P=p=>[p[0]*w,p[1]*h],path=pts=>{ctx.beginPath();pts.forEach((p,k)=>{const[x,y]=P(p);k?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.closePath()};
+  ctx.lineJoin='round';
+  project.surfaces.forEach((s,i)=>{if(!s.visible)return;const on=selKind==='s'&&i===sel;
+    ctx.setLineDash(on?[]:[10,8]);ctx.lineWidth=on?3:1.5;ctx.strokeStyle=PALETTE[i%PALETTE.length];path(geometry(s).poly);ctx.stroke()});
+  ctx.setLineDash([]);
+  const it=selKind==='m'?project.masks[sel]:project.surfaces[sel];if(!it||!it.visible)return;
+  const col=selKind==='m'?MASKC:PALETTE[sel%PALETTE.length],H=selKind==='m'?it.pts:handlesOf(it);
+  if(selKind==='m'){ctx.lineWidth=3;ctx.strokeStyle=MASKC;path(it.pts);ctx.stroke()}
+  ctx.strokeStyle=col;ctx.lineWidth=2;
+  H.forEach((p,k)=>{const[x,y]=P(p);ctx.beginPath();ctx.arc(x,y,k===selPt?14:7,0,7);ctx.stroke()});
+  if(selPt>=0&&H[selPt]){const[x,y]=P(H[selPt]);
+    ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();
+    ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x-34,y);ctx.lineTo(x+34,y);ctx.moveTo(x,y-34);ctx.lineTo(x,y+34);ctx.stroke()}
 }
 
 /* pointer: drag handles, drag inside to move, wheel zoom, space/middle-drag pan */
@@ -1052,10 +1242,10 @@ ov.addEventListener('contextmenu',e=>e.preventDefault());
    ===================================================================== */
 let outWin=null,outR=null;
 const OUT_HTML=`<!doctype html><html><head><meta charset="utf-8"><title>Lumen Pin – Output</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}canvas{display:block;width:100%;height:100%}
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}canvas{display:block;width:100%;height:100%}#g{position:fixed;inset:0;pointer-events:none}
 #tip{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#ffb547;font:600 20px system-ui,sans-serif;cursor:pointer;background:rgba(0,0,0,.4);transition:opacity .3s}
 #tip small{color:#99a;font:400 13px system-ui,sans-serif}#tip.hide{opacity:0;pointer-events:none}</style></head>
-<body><canvas id="c"></canvas><div id="tip">Click to fill this screen<small>F toggles fullscreen · Esc exits · close this window to stop output</small></div></body></html>`;
+<body><canvas id="c"></canvas><canvas id="g"></canvas><div id="tip">Click to fill this screen<small>F toggles fullscreen · Esc exits · close this window to stop output</small></div></body></html>`;
 function openOutput(){
   if(outWin&&!outWin.closed){outWin.focus();toast('Output window is already open');return}
   const w=window.open('','lumen-pin-output','popup,width=960,height=540');
@@ -1067,9 +1257,20 @@ function openOutput(){
     const fs=()=>{if(d.fullscreenElement)d.exitFullscreen();else d.documentElement.requestFullscreen().catch(()=>{})};
     let idle;const wake=()=>{tip.classList.remove('hide');d.body.style.cursor='default';clearTimeout(idle);idle=setTimeout(()=>{tip.classList.add('hide');d.body.style.cursor='none'},2500)};
     tip.addEventListener('click',fs);d.addEventListener('mousemove',wake);wake();
-    d.addEventListener('keydown',e=>{if(showKeys(e))return;if(e.key==='f'||e.key==='F')fs();if(e.key==='b'||e.key==='B'){blackout=!blackout;renderTop()}});
+    // the operator may drive everything from the projector window, including nudging corners while Align is on
+    d.addEventListener('keydown',e=>{if((e.key==='f'||e.key==='F')&&!e.ctrlKey&&!e.metaKey){fs();return}onKey(e)});
+    d.addEventListener('keyup',onKeyUp);
+    const wl=()=>{try{if(w.navigator.wakeLock&&d.visibilityState==='visible')w.navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}};
+    wl();d.addEventListener('visibilitychange',wl);
     w.addEventListener('beforeunload',()=>{outWin=null;outR=null;renderTop()});
-    const loop=()=>{if(w.closed||outWin!==w)return;try{outR.fit(w);const t=now();outR.draw(drawList(t),t,{testGrid,blackout,master:project.master})}catch(e){console.error(e)}w.requestAnimationFrame(loop)};
+    const gc=d.getElementById('g'),gx=gc.getContext('2d');let guides=false;
+    // this loop also advances audio, tempo and scene playback, so the show keeps running when the editor window is hidden
+    const loop=()=>{if(w.closed||outWin!==w)return;
+      try{outR.fit(w);const t=tick();outR.draw(drawList(t),t,{testGrid,blackout,master:project.master});
+        if(align||guides){const dpr=w.devicePixelRatio||1,cw=w.innerWidth,ch=w.innerHeight;
+          if(gc.width!==Math.round(cw*dpr)||gc.height!==Math.round(ch*dpr)){gc.width=Math.round(cw*dpr);gc.height=Math.round(ch*dpr)}
+          gx.setTransform(dpr,0,0,dpr,0,0);gx.clearRect(0,0,cw,ch);if(align)drawAlign(gx,cw,ch);guides=align}
+      }catch(e){console.error(e)}w.requestAnimationFrame(loop)};
     w.requestAnimationFrame(loop);
     const hint=()=>toast('Drag the output window onto the projector, then click it to fill the screen.');
     if('getScreenDetails' in window){window.getScreenDetails().then(sd=>{
@@ -1114,7 +1315,7 @@ function renderTop(){
   if(!PRESETS.some(([w,h])=>w===o.w&&h===o.h)) html=`<option value="${o.w}x${o.h}">${o.w}×${o.h}${live?' (from window)':''}</option>`+html;
   s.innerHTML=html;s.value=`${o.w}x${o.h}`;s.disabled=!!live;s.title=live?'Matched to the output window':'Projector resolution';
   const b=$('outBtn');b.textContent=live?'Output live · Close':'Open output window';b.classList.toggle('live',!!live);
-  $('testBtn').classList.toggle('on',testGrid);$('blackBtn').classList.toggle('on',blackout);
+  $('testBtn').classList.toggle('on',testGrid);$('blackBtn').classList.toggle('on',blackout);$('alignBtn').classList.toggle('on',align);
   renderUndo();
 }
 function surfName(id){const s=project.surfaces.find(x=>x.id===id);return s?s.name:'missing surface'}
@@ -1182,9 +1383,11 @@ function renderProps(){
         <div><div class="cur-nm">${esc(def.name)}</div><div class="cur-hint">${def.cat} · click to change</div></div></summary>
       <div class="pick-body">${picker}</div>
     </details>
-    ${def.id==='media'?`<div class="grid2"><label for="mediaSel">File</label><select id="mediaSel"><option value="">Loading…</option></select>
-      <label for="mediaFile">Add file</label><input type="file" id="mediaFile" accept="image/*,video/*"></div>`:''}
+    ${def.id==='media'?`<div class="grid2"><label for="mediaSel">Source</label><select id="mediaSel"><option value="">Loading…</option></select>
+      <label for="mediaFile">Add file</label><input type="file" id="mediaFile" accept="image/*,video/*"></div>${isLive(s.mediaId)?liveRow(s.mediaId):''}`:''}
     <div class="grid2" id="pctl">${pctl}</div>
+    <div class="grid2"><label>Layout</label><div class="seg"><button data-space="surface" class="${s.space!=='output'?'on':''}" title="Content fills this surface and bends with it">Per surface</button><button data-space="output" class="${s.space==='output'?'on':''}" title="Content is laid out across the whole output, so neighbouring surfaces continue one picture">Span output</button></div></div>
+    ${s.space==='output'?'<div class="note">Surfaces set to Span output show their part of one shared picture, so a video or effect flows across all of them.</div>':''}
   </section>
   <section>
     <span class="lbl">Shape</span>
@@ -1219,7 +1422,7 @@ function renderProps(){
       <button class="icon" data-rdel="${i}" title="Remove this reaction">✕</button>
       <div class="rng"><input type="range" data-ri="${i}" data-rf="amount" min="-1" max="1" step="0.01" value="${r.amount}" aria-label="Amount"><output>${fmt(r.amount)}</output></div></div>`).join('')}
     <div class="row"><button id="rAdd">+ Add reaction</button></div>
-    <div class="note">${s.reactions.length?(AUD.active?'Negative amounts react the opposite way.':'Turn on audio in the left panel to see this move.'):'Make this surface pulse, brighten or speed up with the music.'}</div>
+    <div class="note">${s.reactions.length?(s.reactions.some(r=>bandVal(r.band)==null)?'Turn on audio (or Tempo for Tempo pulse) in the left panel to see this move.':'Negative amounts react the opposite way.'):'Make this surface pulse, brighten or speed up with the music or the tempo.'}</div>
   </section>
   <section>
     <span class="lbl">${mesh?'Points':'Corners'} (output px)</span>
@@ -1232,6 +1435,12 @@ function renderProps(){
   coords();
   if(def.id==='media') fillMediaSelect(s);
   if(def.id==='custom') showCodeErr(prm.code||'');
+}
+function liveRow(id){
+  const m=mediaCache.get(id),screen=id==='live:screen';
+  const st=!m?'Starting…':m.ready?'Live: '+m.name:m.starting?'Waiting for permission…':m.error?m.error:m.waiting?(screen?'Not sharing yet':'Stopped'):'Starting…';
+  const btn=!m||m.starting?'':m.ready?'<button id="liveStop">Stop</button>':`<button id="liveStart" class="primary">${screen?'Start screen share':'Start camera'}</button>`;
+  return `<div class="row"><span class="note" style="flex:1;min-width:0">${esc(st)}</span>${btn}</div>`;
 }
 function reactTargets(def){return [['bright','Brightness'],['opac','Opacity'],['speed','Speed']].concat(def.params.filter(d=>d.t==='range').map(d=>[d.k,d.l]))}
 function showCodeErr(code){
@@ -1267,8 +1476,15 @@ function renderMaskProps(P,m){
 }
 async function fillMediaSelect(s){
   const el=$('mediaSel');if(!el)return;
-  let list=[];try{list=(await store.all('media')).sort((a,b)=>b.created-a.created)}catch(e){}
-  el.innerHTML=`<option value="">— choose a file —</option>`+list.map(m=>`<option value="${m.id}"${m.id===s.mediaId?' selected':''}>${esc(m.name)}</option>`).join('');
+  let list=[];try{list=(await store.all('media')).filter(m=>!/^audio\//.test(m.type)).sort((a,b)=>b.created-a.created)}catch(e){}
+  let cams=[];try{cams=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'&&d.deviceId)}catch(e){}
+  const live=cams.map((c,i)=>['live:cam:'+c.deviceId,c.label||'Camera / capture '+(i+1)]);
+  if(!live.length)live.push(['live:cam:','Camera / capture card']);
+  live.push(['live:screen','Screen or window share']);
+  if(isLive(s.mediaId)&&!live.some(([v])=>v===s.mediaId))live.unshift([s.mediaId,mediaCache.get(s.mediaId)?.name||'Camera']);
+  const opt=([v,l])=>`<option value="${esc(v)}"${v===s.mediaId?' selected':''}>${esc(l)}</option>`;
+  el.innerHTML=`<option value="">— choose —</option>`+(list.length?`<optgroup label="Files">${list.map(m=>opt([m.id,m.name])).join('')}</optgroup>`:'')+
+    `<optgroup label="Live input">${live.map(opt).join('')}</optgroup>`;
 }
 function coords(){
   const el=$('coords');if(!el||!project)return;
@@ -1279,7 +1495,7 @@ function coords(){
   if(s.warp==='mesh'){const H2=handlesOf(s);el.innerHTML=`<span>${H2.length} points</span><span class="on">${selPt>=0&&H2[selPt]?'Point '+(selPt+1)+': '+f(H2[selPt]):'No point selected'}</span>`}
   else el.innerHTML=s.pts.map((p,k)=>`<span class="${k===selPt?'on':''}">${k+1}: ${f(p)}</span>`).join('');
 }
-function renderAll(){renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio()}
+function renderAll(){renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderMidi()}
 
 /* property events (delegated, so they survive re-renders) */
 $('props').addEventListener('input',e=>{
@@ -1313,7 +1529,9 @@ $('props').addEventListener('change',async e=>{
     else if(t.id==='kTarget'){m.target=t.value;renderList()}
     scheduleSave();commit();return}
   const s=project.surfaces[sel];if(!s)return;
-  if(t.id==='mediaSel'){s.mediaId=t.value||null;await loadMedia(s.mediaId);scheduleSave();commit();return}
+  if(t.id==='mediaSel'){s.mediaId=t.value||null;storeLook();pruneLive();scheduleSave();commit();renderProps();
+    if(s.mediaId==='live:screen'&&!mediaCache.get(s.mediaId)?.ready)toast('Click Start screen share to pick a screen or window');
+    await loadMedia(s.mediaId);return}
   if(t.id==='mediaFile'){const f=t.files[0];if(!f)return;
     if(f.size>400*1024*1024){toast('That file is over 400 MB. Try a smaller export.');return}
     try{s.mediaId=await addMediaFile(f);scheduleSave();commit();fillMediaSelect(s);toast('Saved '+f.name+' to this project')}
@@ -1331,6 +1549,9 @@ $('props').addEventListener('click',e=>{
   const s=project.surfaces[sel];if(!s)return;
   if(id==='codeRun'){runCode();return}
   if(id==='codeReset'){paramsOf(s,'custom').code=DEFAULT_CODE;renderProps();scheduleSave();commit();return}
+  if(id==='liveStart'){loadLive(s.mediaId,true);return}
+  if(id==='liveStop'){stopLive(s.mediaId);renderProps();return}
+  if(b.dataset.space){s.space=b.dataset.space;renderProps();scheduleSave();commit();return}
   if(id==='rAdd'){s.reactions.push({band:'bass',target:'bright',amount:.6});renderProps();scheduleSave();commit();return}
   if(b.dataset.rdel){s.reactions.splice(+b.dataset.rdel,1);renderProps();scheduleSave();commit();return}
   const chip=b.closest('[data-shader]');
@@ -1398,6 +1619,7 @@ $('bgRemove').onclick=e=>arm(e.target,'Click again',()=>{project.bg.mediaId=null
 $('undo').onclick=undo;$('redo').onclick=redoF;
 $('testBtn').onclick=()=>{testGrid=!testGrid;renderTop()};
 $('blackBtn').onclick=()=>{blackout=!blackout;renderTop()};
+$('alignBtn').onclick=()=>{align=!align;renderTop()};
 $('outSize').onchange=e=>{const[w,h]=e.target.value.split('x').map(Number);project.output={w,h};computeView();coords();scheduleSave();commit()};
 $('outBtn').onclick=()=>{outWin&&!outWin.closed?closeOutput():openOutput()};
 $('singleBtn').onclick=()=>setSingle(true);
@@ -1406,7 +1628,7 @@ function setSingle(on){document.body.classList.toggle('output',on);layout();if(o
 /* scenes bar */
 function renderScenes(){
   if(!project)return;
-  $('sceneChips').innerHTML=project.scenes.map((x,i)=>`<button class="schip${x.id===project.activeScene?' on':''}" data-sc="${i}" title="Shift+${i+1}"><span class="n">${i+1}</span>${esc(x.name)}${+x.hold>0?`<span class="n">${x.hold}s</span>`:''}</button>`).join('');
+  $('sceneChips').innerHTML=project.scenes.map((x,i)=>`<button class="schip${x.id===project.activeScene?' on':''}${pendingGo&&pendingGo.i===i?' pend':''}" data-sc="${i}" title="Shift+${i+1}"><span class="n">${i+1}</span>${esc(x.name)}${+x.hold>0?`<span class="n">${x.hold}s</span>`:''}</button>`).join('');
   $('scenePlay').textContent=playing?'■ Stop':'▶ Play';$('scenePlay').classList.toggle('on',playing);
   $('master').value=project.master;
 }
@@ -1419,7 +1641,8 @@ function renderScenePanel(){
   <div class="note">A scene remembers each surface's content, colors, speed, brightness, visibility and audio reactions. Shapes and masks are shared by all scenes. Hold is how long Play stays here; 0 means stay until you switch.</div>
   <div class="row"><button id="spLeft" class="icon" title="Move left">◀</button><button id="spRight" class="icon" title="Move right">▶</button><button id="spDup">Duplicate</button><button id="spDel" class="danger">Delete scene</button></div>`;
 }
-$('sceneChips').addEventListener('click',e=>{const b=e.target.closest('[data-sc]');if(b)goScene(+b.dataset.sc)});
+$('sceneChips').addEventListener('click',e=>{const b=e.target.closest('[data-sc]');if(b)cueScene(+b.dataset.sc)});
+$('sceneTap').onclick=tapTempo;
 $('sceneAdd').onclick=()=>{storeLook();const cur=curScene(),i=project.scenes.indexOf(cur);
   const sc={id:uid('c'),name:'Scene '+(project.scenes.length+1),fade:cur?cur.fade:1,hold:0,looks:captureLook()};
   project.scenes.splice(i+1,0,sc);project.activeScene=sc.id;sceneStart=now();renderScenes();if(!$('scenePanel').hidden)renderScenePanel();scheduleSave();
@@ -1443,7 +1666,7 @@ $('scenePanel').addEventListener('click',e=>{const b=e.target.closest('button');
 function renderAudio(){
   if(!project)return;
   document.querySelectorAll('#aSrc [data-asrc]').forEach(b=>b.classList.toggle('on',b.dataset.asrc===AUD.mode));
-  $('aFileRow').hidden=AUD.mode!=='file';
+  $('aFileRow').hidden=AUD.mode!=='file';$('aDevRow').hidden=AUD.mode!=='mic';
   const id=project.audio.mediaId,m=id&&mediaCache.get(id);
   $('aName').textContent=AUD.mode==='file'?(m?'♪ '+m.name:'No music file chosen yet.'):AUD.mode==='mic'?(AUD.active?'Listening to the microphone.':'Waiting for microphone permission…'):'Audio is off. Surfaces with reactions keep their normal look.';
   $('aPick').textContent=id?'Change music…':'Choose music…';
@@ -1456,8 +1679,8 @@ function drawMeter(){
   if(c.width!==Math.round(w*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
   const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
   const bw=w/BANDS.length;x.font='500 9px "IBM Plex Mono",monospace';x.textAlign='center';x.textBaseline='bottom';
-  BANDS.forEach(([k,l],i)=>{const v=AUD.v[k],bh=(h-16)*v;x.fillStyle=k==='beat'?'#4fd6e8':'#ffb547';x.globalAlpha=AUD.active?1:.35;
-    x.fillRect(i*bw+6,h-14-bh,bw-12,bh);x.globalAlpha=1;x.fillStyle='#7d8894';x.fillText(l.toUpperCase(),i*bw+bw/2,h-2)});
+  BANDS.forEach(([k,l],i)=>{const tm=k==='tempo',v=tm?TEMPO.pulse:AUD.v[k],bh=(h-16)*v;x.fillStyle=k==='beat'||tm?'#4fd6e8':'#ffb547';x.globalAlpha=(tm?project.tempo.on:AUD.active)?1:.35;
+    x.fillRect(i*bw+5,h-14-bh,bw-10,bh);x.globalAlpha=1;x.fillStyle='#7d8894';x.fillText(l.split(' ')[0].toUpperCase(),i*bw+bw/2,h-2)});
 }
 $('aSrc').addEventListener('click',e=>{const b=e.target.closest('[data-asrc]');if(!b)return;
   if(b.dataset.asrc==='file'&&!project.audio.mediaId){AUD.mode='file';audioStop();renderAudio();$('aFile').click();return}
@@ -1468,11 +1691,31 @@ $('aFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)
 $('aPlay').onclick=async()=>{if(!AUD.active){await audioSet('file');return}
   if(AUD.el){if(AUD.el.paused)await AUD.el.play().catch(()=>{});else AUD.el.pause()}renderAudio()};
 $('aGain').oninput=e=>{project.audio.gain=+e.target.value;e.target.nextElementSibling.textContent=fmt(e.target.value);scheduleSave()};
+$('aDev').onchange=e=>{ls.set('lumen-pin-adev',e.target.value);audioSet('mic')};
+
+/* tempo panel */
+$('tOn').addEventListener('click',e=>{const b=e.target.closest('[data-ton]');if(!b)return;project.tempo.on=b.dataset.ton==='1';if(project.tempo.on)TEMPO.t0=now();renderTempo();scheduleSave()});
+$('tQuant').addEventListener('click',e=>{const b=e.target.closest('[data-q]');if(!b)return;project.tempo.quant=b.dataset.q;renderTempo();scheduleSave()});
+$('tBpm').onchange=e=>{const tp=project.tempo,t=now(),ph=tp.on?tempoPhase(t):0;tp.bpm=clamp(+e.target.value||120,30,300);TEMPO.t0=t-ph*60/tp.bpm;renderTempo();scheduleSave()};
+$('tTap').onclick=tapTempo;
+$('tSync').onclick=()=>{TEMPO.t0=now();if(!project.tempo.on){project.tempo.on=true;scheduleSave()}renderTempo()};
+
+/* midi panel */
+$('midiBody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const M=project.midi.maps;
+  if(b.id==='midiConnect')midiConnect(false);
+  else if(b.id==='midiAdd'){M.push({action:'scene',arg:'0',key:''});MIDI.learn=M.length-1;renderMidi();scheduleSave()}
+  else if(b.dataset.mlearn){const i=+b.dataset.mlearn;MIDI.learn=MIDI.learn===i?-1:i;renderMidi()}
+  else if(b.dataset.mdel){M.splice(+b.dataset.mdel,1);MIDI.learn=-1;renderMidi();scheduleSave()}});
+$('midiBody').addEventListener('change',e=>{const t=e.target,m=project.midi.maps[+t.dataset.mx];if(!m)return;
+  if(t.dataset.mf==='action'){m.action=t.value;const A=MIDI_ACT[m.action];m.arg=!A.arg?null:A.arg==='scene'?'0':(project.surfaces[sel]||project.surfaces[0]||{}).id||null}
+  else m.arg=t.value;renderMidi();scheduleSave()});
 
 /* keyboard */
 let nudgeTimer;
-addEventListener('keyup',e=>{if(e.key===' '){spaceDown=false;ov.classList.remove('pan')}});
-addEventListener('keydown',e=>{
+function onKeyUp(e){if(e.key===' '){spaceDown=false;ov.classList.remove('pan')}}
+addEventListener('keyup',onKeyUp);
+addEventListener('keydown',onKey);
+function onKey(e){
   if(!$('drawer').hidden){if(e.key==='Escape')closeDrawer();return}
   const t=e.target,tag=(t.tagName||'').toLowerCase(),typing=tag==='textarea'||(tag==='input'&&/text|number/.test(t.type));
   const single=document.body.classList.contains('output');
@@ -1489,7 +1732,8 @@ addEventListener('keydown',e=>{
   if(k==='g'){testGrid=!testGrid;renderTop();return}
   if(k==='b'){blackout=!blackout;renderTop();return}
   if(k==='o'){outWin&&!outWin.closed?outWin.focus():openOutput();return}
-  if(single) return;
+  if(k==='a'){align=!align;renderTop();return}
+  if(single&&!align) return;  // with Align on, corners can be nudged while looking at the projected image
   if(k==='x'){xray=!xray;renderViewPanel();return}
   if(k==='0'){fitView();return}
   if(tag==='select'||(tag==='input'&&t.type==='range')) return;
@@ -1503,13 +1747,14 @@ addEventListener('keydown',e=>{
     if(e.altKey||selPt<0)shiftItem(it,dx,dy,clone({pts:it.pts,mesh:it.mesh||null}));
     else{const H=selKind==='m'?it.pts:handlesOf(it);if(H[selPt]){H[selPt]=[H[selPt][0]+dx,H[selPt][1]+dy];if(selKind==='s')syncCorners(it)}}
     coords();scheduleSave();clearTimeout(nudgeTimer);nudgeTimer=setTimeout(commit,500)}
-});
+}
 
 /* =====================================================================
    PROJECTS DRAWER
    ===================================================================== */
 async function openProject(p){
   project=normProject(p);selKind='s';sel=0;selPt=-1;ensureScenes();fadeState=null;playing=false;
+  pendingGo=null;MIDI.learn=-1;TEMPO.taps=[];TEMPO.t0=now();pruneLive();
   if(AUD.mode==='file')audioSet('off');
   project.surfaces.forEach(s=>loadMedia(s.mediaId));loadMedia(project.bg.mediaId);
   hist=[snap()];redo=[];ls.set('lumen-pin-last',p.id);
@@ -1606,11 +1851,17 @@ function buildThumbs(){
    ===================================================================== */
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),3400)}
 let lastT=0;
+// advances audio, tempo and scene playback; called by both the editor loop and the output window's loop,
+// because a hidden editor window stops getting animation frames while the projector window keeps drawing
+function tick(){
+  const t=now(),dt=Math.min(.1,Math.max(0,t-(lastT||t)));lastT=t;
+  syncOutputSize();audioUpdate(dt,t);audioSpeed(dt);tempoUpdate(t);tickShow(t);
+  return t;
+}
 function frame(){
   if(project){
-    syncOutputSize();editR.fit(window);
-    const t=now(),dt=Math.min(.1,Math.max(0,t-(lastT||t)));lastT=t;
-    audioUpdate(dt,t);audioSpeed(dt);tickShow(t);
+    const t=tick();editR.fit(window);
+    $('tapDot').style.opacity=project.tempo.on?.15+.85*TEMPO.pulse:.15;
     const single=document.body.classList.contains('output'),dpr=glc.width/CW;
     editR.draw(drawList(t),t,{testGrid,blackout,master:project.master,editor:!single,xray:xray&&!single,
       bg:!single&&!bgHidden?project.bg:null,view:{x:VR.x*dpr,y:VR.y*dpr,w:VR.w*dpr,h:VR.h*dpr}});
@@ -1618,6 +1869,7 @@ function frame(){
   }
   requestAnimationFrame(frame);
 }
+function keepAwake(){try{if(navigator.wakeLock&&document.visibilityState==='visible')navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
 async function boot(){
   try{await DB.open();store=DB}catch(e){storageOK=false;store=MemDB;await MemDB.open();toast('Browser storage is off here, so media lasts for this session only.')}
   let list=await listProjects();
@@ -1631,7 +1883,9 @@ async function boot(){
   await openProject(list.find(p=>p.id===last)||list[0]);
   setSaveState(storageOK?'Saved':'Session only (storage off)',storageOK?'':'off');
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-  try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
+  keepAwake();document.addEventListener('visibilitychange',keepAwake);  // the browser drops the lock whenever the page is hidden
+  if(ls.get('lumen-pin-midi')==='1')midiConnect(true);
+  fillAudioDevices();
   buildThumbs();
   requestAnimationFrame(frame);
 }
