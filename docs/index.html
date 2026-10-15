@@ -78,7 +78,7 @@ section{display:flex;flex-direction:column;gap:8px}
 
 .grid2{display:grid;grid-template-columns:84px minmax(0,1fr);gap:8px 10px;align-items:center}
 .grid2>label{font-size:12px;color:var(--dim)}
-input[type=text],input[type=number],select,textarea{width:100%;min-width:0;background:var(--stage);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:400 12px var(--f-body)}
+input[type=text],input[type=number],input[type=time],select,textarea{width:100%;min-width:0;background:var(--stage);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:400 12px var(--f-body)}
 input[type=file]{width:100%;min-width:0;font-size:11px;color:var(--dim)}
 textarea{font-family:var(--f-mono);font-size:11px;height:90px;resize:vertical}
 input[type=range]{width:100%;accent-color:var(--lamp)}
@@ -152,6 +152,10 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::after{content:'+';font:500 13px var(--f-mono);color:var(--dim)}
 details.fold[open]>summary::after{content:'\2013'}
 .fold-body{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+#tl{width:100%;height:34px;display:block;background:var(--stage);border:1px solid var(--line);border-radius:6px;cursor:pointer}
+#playGate{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center;padding-bottom:40px;flex-direction:column;gap:6px;color:var(--lamp);font:600 16px var(--f-body);cursor:none;transition:opacity 1s}
+#playGate small{color:var(--dim);font:400 12px var(--f-body)}
+#playGate.fade{opacity:0}
 #meter{width:100%;height:52px;display:block;background:var(--stage);border:1px solid var(--line);border-radius:6px}
 .react{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2)}
 .react .rng{grid-column:1/-1}
@@ -184,6 +188,9 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
   <select id="outSize" title="Projector resolution" style="width:auto"></select>
   <span class="sep"></span>
   <button id="singleBtn" title="Hide the editor and use this window as output (H)">This screen</button>
+  <button id="blindBtn" title="Edit without changing the output until you press Go">Blind</button>
+  <button class="primary" id="goBtn" hidden title="Send your edits to the output (Enter)">Go ⏎</button>
+  <span class="sep"></span>
   <button class="primary" id="outBtn" title="Open a separate window for the projector (O)">Open output window</button>
 </header>
 
@@ -204,6 +211,10 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="note" id="aName"></div>
       <div class="grid2"><label for="aGain">Sensitivity</label><div class="rng"><input type="range" id="aGain" min="0.2" max="4" step="0.05"><output></output></div></div>
       <canvas id="meter" aria-label="Audio levels"></canvas>
+      <div id="tlRow" hidden class="fold-body" style="margin-top:0">
+        <canvas id="tl" aria-label="Music timeline with scene cues. Click to jump."></canvas>
+        <div class="row between"><span class="note" id="tlTime"></span><label class="check"><input type="checkbox" id="aFollow"> Scenes follow cues</label></div>
+      </div>
       <div class="grid2" id="aDevRow" hidden><label for="aDev">Input</label><select id="aDev"></select></div>
       <div class="note">Choose what each surface does with the sound under Audio reaction in its properties.</div>
     </div>
@@ -219,6 +230,10 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="row"><button id="tTap">Tap (T)</button><button id="tSync" title="Make this moment beat 1 of the bar">Downbeat</button></div>
       <div class="note">Tap along to set the tempo. Use Tempo pulse in a surface's Audio reaction, or uTempo, uTempoPulse and uBar in custom shaders.</div>
     </div>
+  </details>
+  <details class="fold" id="outFold">
+    <summary><span class="lbl">Output &amp; projectors</span></summary>
+    <div class="fold-body" id="outBody"></div>
   </details>
   <details class="fold" id="midiFold">
     <summary><span class="lbl">MIDI control</span></summary>
@@ -245,7 +260,8 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div><kbd>←↑↓→</kbd> nudge 1 px · <kbd>Shift</kbd> ×10</div>
       <div><kbd>Alt</kbd>+arrows move the whole item</div>
       <div>Scroll to zoom · <kbd>Space</kbd>+drag to pan · <kbd>0</kbd> fit</div>
-      <div><kbd>Del</kbd> remove mask point · <kbd>Alt</kbd>+click too</div>
+      <div><kbd>Del</kbd> / <kbd>Alt</kbd>+click remove a mask or edge point</div>
+      <div>Points snap to other shapes and stay joined. Drag with <kbd>Shift</kbd> to pull one free, <kbd>Ctrl</kbd> to skip snapping</div>
       <div><kbd>X</kbd> X-ray · <kbd>G</kbd> test grid · <kbd>B</kbd> blackout</div>
       <div><kbd>A</kbd> align on output · <kbd>T</kbd> tap tempo</div>
       <div><kbd>O</kbd> output window · <kbd>H</kbd> this screen</div>
@@ -284,6 +300,18 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="row"><button id="loadText">Load pasted text as new project</button></div>
     </section>
     <section>
+      <span class="lbl">Player mode (installations)</span>
+      <div class="note">Opens straight into the show with no editor, for kiosks and unattended installs.</div>
+      <div class="grid2">
+        <label>Scenes</label><label class="check"><input type="checkbox" id="plAuto"> Start Play automatically</label>
+        <label for="plAudio">Audio</label><select id="plAudio"><option value="off">Off</option><option value="file">Play the music file</option><option value="mic">Listen to the microphone</option></select>
+        <label for="plOn">On at</label><input type="time" id="plOn">
+        <label for="plOff">Off at</label><input type="time" id="plOff">
+      </div>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="plLink" readonly aria-label="Player link"><button id="plCopy">Copy</button><button id="plOpen">Open player</button></div>
+      <div class="note">Leave the times empty to run all day. On a kiosk computer, start Chrome with <span style="font-family:var(--f-mono)">--kiosk --autoplay-policy=no-user-gesture-required</span> and this link, so the show starts with sound and needs no clicks.</div>
+    </section>
+    <section>
       <span class="lbl">Storage</span>
       <div class="note" id="storeInfo">Checking…</div>
       <div class="row"><button id="cleanMedia">Remove unused media</button></div>
@@ -291,6 +319,7 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
   </div>
 </div>
 <div id="toast"></div>
+<div id="playGate" hidden>Click for full screen and sound<small>H or Esc returns to the editor</small></div>
 
 <script>
 (()=>{
@@ -427,7 +456,9 @@ const SHADERS=[
    float bl=step(.93,hash(floor(p*6.)))*(1.-smoothstep(0.,.12,length(fract(p*6.)-.5)))*tr;
    float inside=step(r,R); return u_c1*(tr*.85+rg*.35+cl*.25+bl*1.5+.04)*inside;}`},
 
- {id:'media',name:'Image / video / live',cat:'Media',params:[S('fit','Fit',['Stretch','Cover','Contain'],0),C('c1','Bar color','#000000')],
+ {id:'media',name:'Image / video / live',cat:'Media',params:[S('fit','Fit',['Stretch','Cover','Contain'],0),C('c1','Bar color','#000000'),
+   S('vend','Video end',['Loop','Play once, hold last frame'],0),S('vstart','On scene change',['Keep playing','Restart from the start'],0),
+   R('vrate','Video speed',.1,4,.05,1),S('vsound','Video sound',['Muted','On'],0)],
   code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 c=uv; float sa=uAspect, ta=uTexAspect;
    if(u_fit>.5&&u_fit<1.5){ if(ta>sa) c.x=(c.x-.5)*sa/ta+.5; else c.y=(c.y-.5)*ta/sa+.5; }
    else if(u_fit>1.5){ if(ta>sa) c.y=(c.y-.5)*ta/sa+.5; else c.x=(c.x-.5)*sa/ta+.5;
@@ -454,6 +485,7 @@ varying vec2 vUV; varying vec2 vOut;
 uniform float uTime,uAspect,uGeoAspect,uTexAspect,uBright,uOpac,uFeather,uRot,uHasMask,uXray; uniform vec2 uFlip; uniform vec4 uRad;
 uniform sampler2D uTex; uniform sampler2D uMask; uniform float uLevel,uBass,uMid,uTreble,uBeat;
 uniform float uTempo,uTempoPulse,uBar,uSpace;
+uniform vec3 uClip,uTint,uOGain; uniform vec4 uGrade; uniform float uOGamma;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 vec2 hash2(vec2 p){float n=hash(p);return vec2(n,hash(p+n+.17));}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
@@ -479,10 +511,19 @@ void main(){
  float a=uOpac*inside; if(uFeather>0.)a*=smoothstep(0.,uFeather,-d);
  float mk=uHasMask>.5?texture2D(uMask,vOut).a:1.;
  a*=mix(mk,1.,uXray*.3); a*=1.-uXray*.4;
- gl_FragColor=vec4(col*uBright,a);
+ if(uClip.x>.5){float wv=clamp((uClip.y-vOut.x)/.04+.5,0.,1.);a*=uClip.z>0.?wv:1.-wv;}  // wipe transitions
+ col=max(col,0.);
+ if(uGrade.w!=0.){const vec3 k=vec3(.57735);float ca=cos(uGrade.w);col=col*ca+cross(k,col)*sin(uGrade.w)+k*dot(k,col)*(1.-ca);}
+ col=mix(vec3(dot(col,vec3(.299,.587,.114))),col,uGrade.z);
+ col=pow(max((col-.5)*uGrade.y+.5,0.),vec3(1./uGrade.x))*uTint;
+ col=pow(max(col*uBright,0.),vec3(1./uOGamma))*uOGain;  // projector calibration for the whole output
+ gl_FragColor=vec4(col,a);
 }`;
 const BG_FS=`precision highp float;varying vec2 vUV;varying vec2 vOut;uniform sampler2D uTex;uniform float uOp;
 void main(){gl_FragColor=vec4(texture2D(uTex,vUV).rgb,uOp);}`;
+const BLEND_FS=`precision highp float;varying vec2 vUV;varying vec2 vOut;uniform vec2 uL;uniform float uP,uG;
+float ramp(float x){x=clamp(x,0.,1.);float f=x<.5?.5*pow(2.*x,uP):1.-.5*pow(2.*(1.-x),uP);return pow(f,1./uG);}
+void main(){float m=1.;if(uL.x>0.)m*=ramp(vUV.x/uL.x);if(uL.y>0.)m*=ramp((1.-vUV.x)/uL.y);gl_FragColor=vec4(vec3(m),1.);}`;
 const declFor=def=>def.params.filter(p=>!NOUNI.has(p.t)).map(p=>p.t==='color'?`uniform vec3 u_${p.k};`:`uniform float u_${p.k};`).join('\n');
 const uniNames=def=>def.params.filter(p=>!NOUNI.has(p.t)).map(d=>'u_'+d.k);
 function buildFS(def){return HEAD+declFor(def)+'\n'+def.code+MAIN}
@@ -495,7 +536,9 @@ function customSrc(code){const toy=/\bmainImage\s*\(/.test(code),pre=HEAD+declFo
   return {src:pre+code+(toy?TOY_POST:'')+MAIN,off:pre.split('\n').length-1}}
 const hashStr=t=>{let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36)+'_'+t.length};
 const customErr=new Map();
-const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace'];
+const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace','uClip','uGrade','uTint','uOGain','uOGamma'];
+const GRADE0={gamma:1,contrast:1,sat:1,hue:0,warm:0},CAL0={gamma:1,r:1,g:1,b:1,flipX:false,flipY:false};
+const warmTint=w=>w>=0?[1,1-.12*w,1-.4*w]:[1+.4*w,1+.12*w,1];
 const hex=h=>{h=String(h||'#000000');return [1,3,5].map(i=>(parseInt(h.substr(i,2),16)||0)/255)};
 
 /* =====================================================================
@@ -513,6 +556,10 @@ function apply3(m,x,y){const w=m[6]*x+m[7]*y+m[8];return[(m[0]*x+m[1]*y+m[2])/w,
 function pip(pt,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];
   if(((a[1]>pt[1])!==(b[1]>pt[1]))&&(pt[0]<(b[0]-a[0])*(pt[1]-a[1])/(b[1]-a[1])+a[0]))c=!c}return c}
 
+const crPt=(a,b,c,d,t)=>{const t2=t*t,t3=t2*t,f=k=>.5*(2*b[k]+(c[k]-a[k])*t+(2*a[k]-5*b[k]+4*c[k]-d[k])*t2+(3*b[k]-a[k]-3*c[k]+d[k])*t3);return [f(0),f(1)]};
+function inv3(m){const [a,b,c,d,e,f,g,h,i]=m,A=e*i-f*h,B=-(d*i-f*g),C=d*h-e*g,det=(a*A+b*B+c*C)||1e-12;
+  return [A/det,-(b*i-c*h)/det,(b*f-c*e)/det,B/det,(a*i-c*g)/det,-(a*f-c*d)/det,C/det,-(a*h-b*g)/det,(a*e-b*d)/det]}
+
 // Catmull-Rom surface through the mesh control points (or straight bilinear when smoothing is off)
 function meshEvalFn(m){
   const {cols,rows,pts}=m,P=(i,j)=>pts[j*(cols+1)+i];
@@ -522,26 +569,48 @@ function meshEvalFn(m){
     if(i<0){const a=P(0,j),b=P(1,j);return [2*a[0]-b[0],2*a[1]-b[1]]}
     if(i>cols){const a=P(cols,j),b=P(cols-1,j);return [2*a[0]-b[0],2*a[1]-b[1]]}
     return P(i,j)};
-  const cr=(a,b,c,d,t)=>{const t2=t*t,t3=t2*t,f=k=>.5*(2*b[k]+(c[k]-a[k])*t+(2*a[k]-5*b[k]+4*c[k]-d[k])*t2+(3*b[k]-a[k]-3*c[k]+d[k])*t3);return [f(0),f(1)]};
   return (u,v)=>{const x=u*cols,y=v*rows,i=Math.min(Math.floor(x),cols-1),j=Math.min(Math.floor(y),rows-1),tx=x-i,ty=y-j;
     if(m.smooth===false){const a=P(i,j),b=P(i+1,j),c=P(i+1,j+1),d=P(i,j+1),f=k=>(a[k]*(1-tx)+b[k]*tx)*(1-ty)+(d[k]*(1-tx)+c[k]*tx)*ty;return [f(0),f(1)]}
-    const r=[];for(let jj=j-1;jj<=j+2;jj++)r.push(cr(ext(i-1,jj),ext(i,jj),ext(i+1,jj),ext(i+2,jj),tx));
-    return cr(r[0],r[1],r[2],r[3],ty)};
+    const r=[];for(let jj=j-1;jj<=j+2;jj++)r.push(crPt(ext(i-1,jj),ext(i,jj),ext(i+1,jj),ext(i+2,jj),tx));
+    return crPt(r[0],r[1],r[2],r[3],ty)};
 }
+// a curve through P, parameterised by length: straight segments, or a smooth Catmull-Rom curve
+function curveFn(P,smooth){
+  const L=[0];for(let i=1;i<P.length;i++)L.push(L[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+  const tot=L[L.length-1]||1,ts=L.map(x=>x/tot),n=P.length-1;
+  const at=i=>i<0?[2*P[0][0]-P[1][0],2*P[0][1]-P[1][1]]:i>n?[2*P[n][0]-P[n-1][0],2*P[n][1]-P[n-1][1]]:P[i];
+  const f=t=>{let i=0;while(i<n-1&&t>ts[i+1])i++;const lt=clamp((t-ts[i])/((ts[i+1]-ts[i])||1),0,1);
+    if(!smooth||n<2){const a=P[i],b=P[i+1];return [a[0]+(b[0]-a[0])*lt,a[1]+(b[1]-a[1])*lt]}
+    return crPt(at(i-1),P[i],P[i+1],at(i+2),lt)};
+  return {f,ts};
+}
+/* Corner pin with extra edge points: each edge becomes a curve through its points and the inside is filled
+   with a Coons patch. The patch is built in the corner pin's own unwarped square, then pushed through the
+   corner-pin perspective, so points that sit on a straight edge change nothing. */
+function outlineFn(s){
+  const H=homog(s.pts),Hi=inv3(H),U=p=>{const r=apply3(Hi,p[0],p[1]);return [r[0],r[1]]};
+  const C=[[0,0],[1,0],[1,1],[0,1]],sm=s.edgeSmooth!==false;
+  const E=[0,1,2,3].map(k=>curveFn([C[k],...s.edges[k].map(U),C[(k+1)%4]],sm));
+  const f=(u,v)=>{const T=E[0].f(u),R=E[1].f(v),B=E[2].f(1-u),L=E[3].f(1-v);
+    const x=(1-v)*T[0]+v*B[0]+(1-u)*L[0]+u*R[0]-u,y=(1-v)*T[1]+v*B[1]+(1-u)*L[1]+u*R[1]-v,r=apply3(H,x,y);return [r[0],r[1]]};
+  f.ts=E.map(e=>e.ts);return f;
+}
+const hasEdges=s=>!!s.edges&&s.edges.some(e=>e.length);
 function evalFn(s){
   if(s.warp==='mesh'&&s.mesh) return meshEvalFn(s.mesh);
-  const H=homog(s.pts);return (u,v)=>{const r=apply3(H,u,v);return [r[0],r[1]]};
+  if(hasEdges(s)) return outlineFn(s);
+  const H=homog(s.pts),f=(u,v)=>{const r=apply3(H,u,v);return [r[0],r[1]]};f.ts=[[0,1],[0,1],[0,1],[0,1]];return f;
 }
 const GRID=32;
 const geoCache=new Map();
 function geometry(s){
-  const key=s.warp==='mesh'&&s.mesh?JSON.stringify([s.mesh.cols,s.mesh.rows,s.mesh.smooth,s.mesh.pts]):JSON.stringify(s.pts);
-  let g=geoCache.get(s.id);if(g&&g.key===key) return g;
+  const key=s.warp==='mesh'&&s.mesh?JSON.stringify([s.mesh.cols,s.mesh.rows,s.mesh.smooth,s.mesh.pts]):JSON.stringify([s.pts,s.edges,s.edgeSmooth]);
+  const ck=s.id+(s._ck||'');let g=geoCache.get(ck);if(g&&g.key===key) return g;
   const f=evalFn(s),N=GRID,data=new Float32Array((N+1)*(N+1)*4);let k=0;
   for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=i/N,v=j/N,[x,y]=f(u,v);data[k++]=x;data[k++]=y;data[k++]=u;data[k++]=v}
   const at=(i,j)=>{const o=(j*(N+1)+i)*4;return [data[o],data[o+1]]},poly=[];
   for(let i=0;i<N;i++)poly.push(at(i,0));for(let j=0;j<N;j++)poly.push(at(N,j));for(let i=N;i>0;i--)poly.push(at(i,N));for(let j=N;j>0;j--)poly.push(at(0,j));
-  g={key,data,poly,at,f};geoCache.set(s.id,g);return g;
+  g={key,data,poly,at,f,ts:f.ts};geoCache.set(ck,g);return g;
 }
 function aspects(s){
   const g=geometry(s),W=project.output.w,H=project.output.h,ak=W+'x'+H;
@@ -550,15 +619,50 @@ function aspects(s){
     g.geo=(t+b)/Math.max(l+r,1e-6);g.ak=ak}
   return {geo:g.geo,content:(+s.rot)%2?1/g.geo:g.geo};
 }
+const noEdges=()=>[[],[],[],[]];
 function syncCorners(s){if(s.warp==='mesh'&&s.mesh){const m=s.mesh,P=(i,j)=>m.pts[j*(m.cols+1)+i].slice();s.pts=[P(0,0),P(m.cols,0),P(m.cols,m.rows),P(0,m.rows)]}}
 function setMesh(s,cols,rows){const f=evalFn(s),pts=[];for(let j=0;j<=rows;j++)for(let i=0;i<=cols;i++)pts.push(f(i/cols,j/rows));
-  s.mesh={cols,rows,pts,smooth:s.mesh?s.mesh.smooth!==false:true};s.warp='mesh';syncCorners(s)}
-function handlesOf(s){return s.warp==='mesh'&&s.mesh?s.mesh.pts:s.pts}
-function cornerIndex(s,k){if(s.warp!=='mesh'||!s.mesh)return k;const c=s.mesh.cols,r=s.mesh.rows;return [0,c,(r+1)*(c+1)-1,r*(c+1)][k]}
-function shiftItem(it,dx,dy,orig){
-  it.pts=orig.pts.map(([a,b])=>[a+dx,b+dy]);
-  if(orig.mesh&&it.mesh)it.mesh.pts=orig.mesh.pts.map(([a,b])=>[a+dx,b+dy]);
+  s.mesh={cols,rows,pts,smooth:s.mesh?s.mesh.smooth!==false:true};s.warp='mesh';s.edges=noEdges();syncCorners(s)}
+// back to corner pin: the mesh's border points become edge points (dropping edges that are straight anyway)
+function meshToQuad(s){
+  const m=s.mesh,c=m.cols,r=m.rows,P=(i,j)=>m.pts[j*(c+1)+i].slice(),seq=(n,fn)=>Array.from({length:Math.max(0,n)},(_,i)=>fn(i));
+  syncCorners(s);
+  const E=[seq(c-1,i=>P(i+1,0)),seq(r-1,j=>P(c,j+1)),seq(c-1,i=>P(c-1-i,r)),seq(r-1,j=>P(0,r-1-j))],W=project.output.w,H=project.output.h;
+  s.edges=E.map((pts,k)=>{const a=s.pts[k],b=s.pts[(k+1)%4],dx=(b[0]-a[0])*W,dy=(b[1]-a[1])*H,len=Math.hypot(dx,dy)||1;
+    return pts.every(p=>Math.abs(((p[0]-a[0])*W)*dy-((p[1]-a[1])*H)*dx)/len<.75)?[]:pts});
+  s.edgeSmooth=m.smooth!==false;s.warp='quad';
 }
+const isSurf=it=>'shader' in it;
+// all draggable points of an item, corners first: mesh points, or corners then edge points, or mask points
+function handlesOf(s){return s.warp==='mesh'&&s.mesh?s.mesh.pts:s.edges?s.pts.concat(...s.edges):s.pts}
+function edgeRef(s,k){k-=4;for(let e=0;e<4;e++){const n=s.edges[e].length;if(k<n)return [e,k];k-=n}return null}
+function setHandle(it,k,p){
+  if(!isSurf(it)){it.pts[k]=p;return}
+  if(it.warp==='mesh'&&it.mesh){it.mesh.pts[k]=p;syncCorners(it);return}
+  if(k<4){it.pts[k]=p;return}
+  const r=edgeRef(it,k);if(r)it.edges[r[0]][r[1]]=p;
+}
+function delEdgePt(s,k){if(!isSurf(s)||s.warp==='mesh'||k<4)return false;const r=edgeRef(s,k);if(!r)return false;s.edges[r[0]].splice(r[1],1);return true}
+function addEdgePt(s,e,i,p){s.edges[e].splice(i,0,p);let k=4;for(let j=0;j<e;j++)k+=s.edges[j].length;return k+i}
+// where the + markers go on a corner-pin surface: halfway between neighbouring points along each edge
+function edgeAdds(s){
+  const g=geometry(s),B=[t=>g.f(t,0),t=>g.f(1,t),t=>g.f(1-t,1),t=>g.f(0,1-t)],out=[];
+  g.ts.forEach((ts,e)=>{for(let i=0;i<ts.length-1;i++)out.push({e,i,p:B[e]((ts[i]+ts[i+1])/2)})});return out;
+}
+function cornerIndex(s,k){if(s.warp!=='mesh'||!s.mesh)return k;const c=s.mesh.cols,r=s.mesh.rows;return [0,c,(r+1)*(c+1)-1,r*(c+1)][k]}
+const shapeOf=it=>clone({pts:it.pts,mesh:it.mesh||null,edges:it.edges||null,warp:it.warp||null});
+function shiftItem(it,dx,dy,orig){
+  const mv=([a,b])=>[a+dx,b+dy];
+  it.pts=orig.pts.map(mv);
+  if(orig.mesh&&it.mesh)it.mesh.pts=orig.mesh.pts.map(mv);
+  if(orig.edges&&it.edges)it.edges=orig.edges.map(E=>E.map(mv));
+}
+// points of other items sitting on this spot (within a pixel) move together, so shared corners stay joined
+function otherHandles(except){const out=[];
+  project.surfaces.forEach(s=>{if(s!==except&&s.visible)handlesOf(s).forEach((p,k)=>out.push({it:s,k,p:p.slice()}))});
+  project.masks.forEach(m=>{if(m!==except&&m.visible)m.pts.forEach((p,k)=>out.push({it:m,k,p:p.slice()}))});return out}
+const pxDist=(a,b)=>Math.hypot((a[0]-b[0])*project.output.w,(a[1]-b[1])*project.output.h);
+const linkedTo=(it,p)=>otherHandles(it).filter(h=>pxDist(h.p,p)<.75);
 
 /* =====================================================================
    STATE
@@ -577,12 +681,17 @@ function normSurface(s){
   s.params=s.params||{};s.warp=s.warp||'quad';if(s.warp==='mesh'&&!s.mesh)s.warp='quad';
   s.round=Array.isArray(s.round)&&s.round.length===4?s.round:[0,0,0,0];if(s.roundLinked===undefined)s.roundLinked=true;if(!Array.isArray(s.reactions))s.reactions=[];
   if(s.space!=='output')s.space='surface';
+  s.grade=Object.assign({},GRADE0,s.grade||{});
+  if(!Array.isArray(s.edges)||s.edges.length!==4)s.edges=noEdges();if(s.edgeSmooth===undefined)s.edgeSmooth=true;
   paramsOf(s);return s;
 }
 function normProject(p){
   p.output=p.output||{w:1920,h:1080};p.surfaces=(p.surfaces||[]).map(normSurface);p.masks=p.masks||[];
   p.bg=Object.assign({mediaId:null,opacity:.5},p.bg||{});p.scenes=p.scenes||[];p.audio=Object.assign({mediaId:null,gain:1},p.audio||{});if(p.master==null)p.master=1;
-  p.tempo=Object.assign({on:false,bpm:120,quant:'off'},p.tempo||{});p.midi=Object.assign({maps:[]},p.midi||{});return p;
+  p.tempo=Object.assign({on:false,bpm:120,quant:'off'},p.tempo||{});p.midi=Object.assign({maps:[]},p.midi||{});
+  p.cal=Object.assign({},CAL0,p.cal||{});
+  p.multi=Object.assign({n:1,pw:p.output.w,ph:p.output.h,ov:0,curve:2,gamma:2.2},p.multi||{});
+  p.player=Object.assign({autoplay:true,audio:'off',on:'',off:''},p.player||{});return p;
 }
 function paramsOf(s,id=s.shader){
   const def=SH[id];if(!def) return {};
@@ -657,8 +766,23 @@ async function loadMedia(id){
   mediaCache.set(id,m);
   if(rec.type.startsWith('audio')){const a=new Audio();a.src=url;a.loop=true;a.preload='auto';m.el=a;m.audio=true;m.ready=true}
   else if(m.video){const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.autoplay=true;v.src=url;
-    v.addEventListener('loadeddata',()=>{m.ready=true;m.aspect=v.videoWidth/v.videoHeight||1});v.play().catch(()=>{});m.el=v;}
+    v.addEventListener('loadeddata',()=>{m.ready=true;m.aspect=v.videoWidth/v.videoHeight||1});v.play().catch(()=>{});m.el=v;
+    if(project&&selKind==='s'&&project.surfaces[sel]&&project.surfaces[sel].mediaId===id)renderProps();}
   else{const im=new Image();im.onload=()=>{m.ready=true;m.aspect=im.naturalWidth/im.naturalHeight||1};im.src=url;m.el=im;}
+}
+const isFileVideo=id=>{const m=mediaCache.get(id);return !!(m&&m.video&&!m.live&&m.el)};
+// apply each video surface's playback options to its video (several surfaces showing one file share them)
+function videoSync(){
+  for(const s of project.surfaces){if(s.shader!=='media'||!s.visible||!isFileVideo(s.mediaId))continue;
+    const v=mediaCache.get(s.mediaId).el,p=paramsOf(s,'media'),loop=!(+p.vend>0),rate=clamp(+p.vrate||1,.1,4),mute=!(+p.vsound>0);
+    if(v.loop!==loop)v.loop=loop;if(Math.abs(v.playbackRate-rate)>.001)v.playbackRate=rate;
+    if(v.muted!==mute){v.muted=mute;if(!mute)v.play().catch(()=>{v.muted=true})}
+    if(loop&&v.paused)v.play().catch(()=>{})}
+}
+// a scene just started: restart the videos that ask for it
+function videoCue(){
+  for(const s of project.surfaces){if(s.shader!=='media'||!s.visible||!isFileVideo(s.mediaId))continue;
+    if(+paramsOf(s,'media').vstart>0){const v=mediaCache.get(s.mediaId).el;try{v.currentTime=0}catch(e){}v.play().catch(()=>{})}}
 }
 async function addMediaFile(file){
   const id=uid('m');
@@ -703,11 +827,11 @@ function roundedPath(ctx,P,r){
     const lim=Math.min(Math.hypot(a[0]-pr[0],a[1]-pr[1]),Math.hypot(b[0]-a[0],b[1]-a[1]))/2;ctx.arcTo(a[0],a[1],b[0],b[1],Math.min(r,lim))}
   ctx.closePath();
 }
-function masksFor(s){return project.masks.filter(m=>m.visible&&m.pts.length>=3&&(m.target==='all'||m.target===s.id))}
-function maskFor(s){
-  const ms=masksFor(s);if(!ms.length) return null;
+function masksFor(s,masks=project.masks){return masks.filter(m=>m.visible&&m.pts.length>=3&&(m.target==='all'||m.target===s.id))}
+function maskFor(s,masks){
+  const ms=masksFor(s,masks);if(!ms.length) return null;
   const W=project.output.w,H=project.output.h,key=JSON.stringify([ms,W,H]);
-  let c=maskCache.get(s.id);if(c&&c.key===key) return c;
+  const ck=s.id+(s._ck||'');let c=maskCache.get(ck);if(c&&c.key===key) return c;
   const sc=Math.min(1,1280/Math.max(W,H)),cw=Math.max(2,Math.round(W*sc)),ch=Math.max(2,Math.round(H*sc));
   const cv=c&&c.canvas||document.createElement('canvas');cv.width=cw;cv.height=ch;
   const ctx=cv.getContext('2d');ctx.globalCompositeOperation='source-over';ctx.filter='none';ctx.fillStyle='#fff';ctx.fillRect(0,0,cw,ch);
@@ -718,7 +842,7 @@ function maskFor(s){
     roundedPath(ctx,P,(+m.round||0)*sc);ctx.fillStyle='#fff';ctx.fill('evenodd');
   }
   ctx.filter='none';ctx.globalCompositeOperation='source-over';
-  c={key,canvas:cv,ver:++maskVer};maskCache.set(s.id,c);return c;
+  c={key,canvas:cv,ver:++maskVer};maskCache.set(ck,c);return c;
 }
 
 /* =====================================================================
@@ -733,7 +857,7 @@ function ensureFont(weight,font,id){
 }
 function textTex(s,aspect){
   const p=paramsOf(s,'text'),scroll=+p.mode>.5,key=JSON.stringify([p.text,p.font,p.weight,p.size,scroll,scroll?0:Math.round(aspect*40)]);
-  let c=textCache.get(s.id);if(c&&c.key===key) return c;
+  const ck=s.id+(s._ck||'');let c=textCache.get(ck);if(c&&c.key===key) return c;
   const H=512,weight=+p.weight?'700':'400',fam=`"${p.font}", "Arial Black", sans-serif`;ensureFont(weight,p.font,s.id);
   const cv=c&&c.canvas||document.createElement('canvas'),ctx=cv.getContext('2d');let fs=Math.max(8,+p.size*H);
   const txt=String(p.text||'');
@@ -749,7 +873,7 @@ function textTex(s,aspect){
     ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
     const total=lines.length*fs*lh;lines.forEach((l,i)=>ctx.fillText(l,W/2,H/2-total/2+fs*lh*(i+.5)));
   }
-  c={key,canvas:cv,ver:++textVer,aspect:cv.width/cv.height};textCache.set(s.id,c);return c;
+  c={key,canvas:cv,ver:++textVer,aspect:cv.width/cv.height};textCache.set(ck,c);return c;
 }
 
 /* =====================================================================
@@ -949,7 +1073,9 @@ function goScene(i,instant,skipStore){
     LOOK_KEYS.forEach(k=>{if(l[k]!==null&&l[k]!==undefined)s[k]=clone(l[k]);else if(k==='mediaId')s[k]=null});
     normSurface(s);phases.set(s.id,{t0:t,p0:ph-(audioPhase.get(s.id)||0)});loadMedia(s.mediaId)});
   project.activeScene=sc.id;sceneStart=t;
-  fadeState=instant||!(+sc.fade>0)?null:{from,t0:t,dur:+sc.fade};
+  const tr=sc.trans||'fade';
+  fadeState=instant||tr==='cut'||!(+sc.fade>0)?null:{from,t0:t,dur:+sc.fade,type:tr};
+  videoCue();if(blind)goLive();
   hist=[snap()];redo=[];renderAll();if(!$('scenePanel').hidden)renderScenePanel();scheduleSave();
 }
 function stepScene(d){const i=pendingGo?pendingGo.i:project.scenes.findIndex(x=>x.id===project.activeScene);cueScene(clamp(i+d,0,project.scenes.length-1))}
@@ -959,14 +1085,18 @@ function tickShow(t){
   if(!playing)return;const sc=curScene();if(!sc)return;const hold=+sc.hold||0;if(hold<=0)return;
   if(t-sceneStart>=hold+(+sc.fade||0)){const i=project.scenes.indexOf(sc);goScene((i+1)%project.scenes.length)}
 }
-// the list actually drawn: during a fade each surface is drawn in its old look, then its new look on top
-function drawList(t){
-  const S=project.surfaces;if(!fadeState)return S;
-  const k=clamp((t-fadeState.t0)/fadeState.dur,0,1);if(k>=1){fadeState=null;return S}
-  const e=k*k*(3-2*k),out=[];
-  for(const s of S){const o=fadeState.from[s.id];
-    if(o&&o.visible){const os=Object.assign({},s,o);os.params=o.params||{};os._fadeOpac=s.visible?1:1-e;out.push(os)}
-    if(s.visible)out.push(Object.assign({},s,{_fadeOpac:e}))}
+// the list actually drawn: during a transition each surface is drawn in its old look, then its new look on top
+function drawList(t){const L=fadeList(project.surfaces,fadeState,t);if(!L)fadeState=null;return L||project.surfaces}
+function fadeList(S,fs,t){
+  if(!fs)return null;const k=clamp((t-fs.t0)/fs.dur,0,1);if(k>=1)return null;
+  const N=S.length,sm=x=>x*x*(3-2*x),out=[];
+  S.forEach((s,i)=>{const o=fs.from[s.id];
+    const kk=fs.type==='cascade'?clamp((k-(N>1?i/(N-1)*.5:0))/.5,0,1):k,e=sm(kk);let oa,na,clip=null;
+    if(fs.type==='black'){oa=kk<.5?1-sm(kk*2):0;na=kk<.5?0:sm(kk*2-1)}        // old look fades out, then the new one in
+    else if(fs.type==='wipe'){oa=1;na=1;clip=-.05+kk*1.1}                         // new look sweeps in from the left
+    else{oa=s.visible?1:1-e;na=e}
+    if(o&&o.visible&&oa>0){const os=Object.assign({},s,o);os.params=o.params||{};os._fadeOpac=oa;os._clip=clip==null?null:[1,clip,-1];out.push(os)}
+    if(s.visible&&na>0)out.push(Object.assign({},s,{_fadeOpac:na,_clip:clip==null?null:[1,clip,1]}))});
   return out;
 }
 function showKeys(e){
@@ -1034,10 +1164,10 @@ class Renderer{
     if(m.video?m.el.readyState>=2:!r.done){try{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,m.el);r.done=true}catch(e){}}
     return r.t;
   }
-  maskTex(s){
-    const mc=maskFor(s);if(!mc) return null;
-    const gl=this.gl;let r=this.mtex.get(s.id);
-    if(!r){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);this.texParams();r={t,ver:-1};this.mtex.set(s.id,r)}
+  maskTex(s,masks=project.masks){
+    const mc=maskFor(s,masks);if(!mc) return null;
+    const gl=this.gl,ck=s.id+(s._ck||'');let r=this.mtex.get(ck);
+    if(!r){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);this.texParams();r={t,ver:-1};this.mtex.set(ck,r)}
     gl.bindTexture(gl.TEXTURE_2D,r.t);
     if(r.ver!==mc.ver){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,mc.canvas);r.ver=mc.ver}
     return r.t;
@@ -1048,15 +1178,22 @@ class Renderer{
   }
   attribs(buf){const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.vertexAttribPointer(0,2,gl.FLOAT,false,16,0);gl.vertexAttribPointer(1,2,gl.FLOAT,false,16,8)}
   draw(surfs,t,o={}){
-    const gl=this.gl,cw=this.c.width,ch=this.c.height,V=o.view||{x:0,y:0,w:cw,h:ch};
+    const gl=this.gl,cw=this.c.width,ch=this.c.height;let V=o.view||{x:0,y:0,w:cw,h:ch};
+    if(o.region){const [a,b]=o.region,rw=b-a;V={x:-a/rw*cw,y:0,w:cw/rw,h:ch}}  // this window shows one projector's slice
     gl.viewport(0,0,cw,ch);
     if(o.editor){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.SCISSOR_TEST);gl.scissor(Math.round(V.x),Math.round(ch-V.y-V.h),Math.max(0,Math.round(V.w)),Math.max(0,Math.round(V.h)));
       gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.disable(gl.SCISSOR_TEST)}
     else{gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT)}
     const view=[2*V.w/cw,-2*V.h/ch,2*V.x/cw-1,1-2*V.y/ch];
+    if(!o.editor&&!o.aspect&&project){const c=project.cal;if(c.flipX){view[0]=-view[0];view[2]=-view[2]}if(c.flipY){view[1]=-view[1];view[3]=-view[3]}}  // rear / ceiling projection
     if(o.bg&&o.bg.mediaId)this.drawBg(o.bg,view);
     if(o.blackout) return;
+    this.surfs(surfs,t,o,view);
+    if(o.blend)this.drawBlend(o.blend);
+  }
+  surfs(surfs,t,o,view){
+    const gl=this.gl;
     surfs.forEach((s,i)=>{
       if(!s.visible) return;
       const id=o.testGrid?'grid':s.shader;
@@ -1078,19 +1215,32 @@ class Renderer{
       gl.uniform1f(u.uXray,o.xray?1:0);
       const av=AUD.v;gl.uniform1f(u.uLevel,av.level);gl.uniform1f(u.uBass,av.bass);gl.uniform1f(u.uMid,av.mid);gl.uniform1f(u.uTreble,av.treble);gl.uniform1f(u.uBeat,av.beat);
       gl.uniform1f(u.uTempo,TEMPO.beat);gl.uniform1f(u.uTempoPulse,TEMPO.pulse);gl.uniform1f(u.uBar,TEMPO.bar);gl.uniform1f(u.uSpace,span?1:0);
+      const cl=s._clip,gr=o.aspect||o.testGrid?GRADE0:s.grade||GRADE0,cal=o.aspect?CAL0:project.cal;
+      gl.uniform3f(u.uClip,cl?1:0,cl?cl[1]:0,cl?cl[2]:0);
+      gl.uniform4f(u.uGrade,clamp(+gr.gamma||1,.1,5),+gr.contrast,+gr.sat,(+gr.hue||0)*Math.PI/180);gl.uniform3fv(u.uTint,warmTint(+gr.warm||0));
+      gl.uniform1f(u.uOGamma,clamp(+cal.gamma||1,.1,5));gl.uniform3f(u.uOGain,+cal.r,+cal.g,+cal.b);
       gl.activeTexture(gl.TEXTURE1);
-      const mt=o.noMasks?null:this.maskTex(s);if(!mt)gl.bindTexture(gl.TEXTURE_2D,this.blank);
+      const mt=o.noMasks?null:this.maskTex(s,o.masks);if(!mt)gl.bindTexture(gl.TEXTURE_2D,this.blank);
       gl.uniform1i(u.uMask,1);gl.uniform1f(u.uHasMask,mt?1:0);
       gl.activeTexture(gl.TEXTURE0);
       let ta=1;
       if(useId==='media'){const tx=this.texFor(s.mediaId);if(!tx)gl.bindTexture(gl.TEXTURE_2D,this.blank);ta=mediaCache.get(s.mediaId)?.aspect||1}
-      else if(useId==='text'){const tc=textTex(s,asp.content);this.canvasTex('t:'+s.id,tc);ta=tc.aspect}
+      else if(useId==='text'){const tc=textTex(s,asp.content);this.canvasTex('t:'+s.id+(s._ck||''),tc);ta=tc.aspect}
       else gl.bindTexture(gl.TEXTURE_2D,this.blank);
       gl.uniform1i(u.uTex,0);gl.uniform1f(u.uTexAspect,ta);
       for(const d of SH[useId].params){if(NOUNI.has(d.t))continue;const loc=u['u_'+d.k],v=prm[d.k]??d.d;
         if(d.t==='color')gl.uniform3fv(loc,hex(v));else gl.uniform1f(loc,+v)}
       gl.drawElements(gl.TRIANGLES,this.nIdx,gl.UNSIGNED_SHORT,0);
     });
+  }
+  // soft edge where neighbouring projectors overlap: darkens this window's overlap so the two add up evenly
+  drawBlend(b){
+    const gl=this.gl;if(!this.blP)this.blP=this.link(BLEND_FS,['uView','uL','uP','uG']);if(!this.blP)return;
+    const c=project.cal,v=[c.flipX?-2:2,c.flipY?2:-2,c.flipX?1:-1,c.flipY?-1:1];
+    gl.useProgram(this.blP.p);this.attribs(this.qbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.qibo);
+    gl.uniform4fv(this.blP.u.uView,v);gl.uniform2f(this.blP.u.uL,b.l,b.r);gl.uniform1f(this.blP.u.uP,b.p);gl.uniform1f(this.blP.u.uG,b.g);
+    gl.blendFunc(gl.ZERO,gl.SRC_COLOR);gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
+    gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   }
   drawBg(bg,view){
     const gl=this.gl;if(!this.bgP)this.bgP=this.link(BG_FS,['uView','uTex','uOp']);if(!this.bgP)return;
@@ -1114,7 +1264,7 @@ function computeView(){
   const pad=24,ar=project?project.output.w/project.output.h:16/9;let fw=Math.max(10,CW-pad*2),fh=Math.max(10,CH-pad*2);
   if(fw/fh>ar)fw=fh*ar;else fh=fw/ar;
   const w=fw*view.zoom,h=fh*view.zoom;VR={x:(CW-w)/2+view.panX,y:(CH-h)/2+view.panY,w,h};
-  if(project)$('stageInfo').textContent=`Output ${project.output.w}×${project.output.h} · zoom ${Math.round(view.zoom*100)}%`;
+  if(project)$('stageInfo').textContent=`Output ${project.output.w}×${project.output.h}${multiN()>1?' across '+multiN()+' projectors':''} · zoom ${Math.round(view.zoom*100)}%${blind?' · BLIND: the output holds until Go':''}`;
   const z=$('zoomInfo');if(z)z.textContent=Math.round(view.zoom*100)+'%';
 }
 function layout(){
@@ -1130,8 +1280,12 @@ const toPx=p=>[VR.x+p[0]*VR.w,VR.y+p[1]*VR.h];
 function drawOverlay(){
   const dpr=ov.width/CW;octx.setTransform(dpr,0,0,dpr,0,0);octx.clearRect(0,0,CW,CH);
   if(!project) return;
-  if(document.body.classList.contains('output')){if(align)drawAlign(octx,CW,CH);return}
+  if(document.body.classList.contains('output')){if(align)drawAlign(octx,CW,CH,null);return}
   octx.strokeStyle='#2f3740';octx.lineWidth=1;octx.strokeRect(VR.x-.5,VR.y-.5,VR.w+1,VR.h+1);
+  if(multiN()>1)for(let k=0;k<multiN();k++){const [a,b]=regionOf(k),bl=blendOf(k);  // projector slices, with their blend zones shaded
+    octx.setLineDash([3,5]);octx.strokeStyle='#ffb54766';octx.strokeRect(VR.x+a*VR.w+.5,VR.y+.5,(b-a)*VR.w-1,VR.h-1);octx.setLineDash([]);
+    if(bl&&bl.r){octx.fillStyle='#ffb5470d';octx.fillRect(VR.x+(b-(b-a)*bl.r)*VR.w,VR.y,(b-a)*bl.r*VR.w,VR.h)}
+    octx.fillStyle='#ffb547aa';octx.font='500 10px "IBM Plex Mono",monospace';octx.textAlign='left';octx.textBaseline='top';octx.fillText('PROJECTOR '+(k+1),VR.x+a*VR.w+6,VR.y+6)}
   const poly=(P,close=true)=>{octx.beginPath();P.forEach((p,k)=>{const[x,y]=toPx(p);k?octx.lineTo(x,y):octx.moveTo(x,y)});if(close)octx.closePath()};
   const label=(txt,P,col)=>{const c=P.reduce((a,p)=>[a[0]+p[0]/P.length,a[1]+p[1]/P.length],[0,0]),[cx,cy]=toPx(c);
     octx.font='500 11px "IBM Plex Sans",sans-serif';octx.textAlign='center';octx.textBaseline='middle';
@@ -1148,12 +1302,17 @@ function drawOverlay(){
         for(let i2=1;i2<m.cols;i2++){const L=[];for(let k=0;k<=24;k++)L.push(g.f(i2/m.cols,k/24));poly(L,false);octx.stroke()}
         const cs=[0,1,2,3].map(k=>cornerIndex(s,k));
         m.pts.forEach((p,k)=>{const ci=cs.indexOf(k),a=k===selPt;dot(p,ci>=0?7:4.5,a?col:'#000',col,ci>=0?String(ci+1):'')});
-      } else s.pts.forEach((p,k)=>dot(p,k===selPt?9:7,k===selPt?col:'#000',col,String(k+1)));
+      } else {
+        edgeAdds(s).forEach(({p})=>{const[x,y]=toPx(p);octx.beginPath();octx.arc(x,y,5,0,7);octx.fillStyle='#000';octx.fill();octx.strokeStyle=col+'99';octx.lineWidth=1;octx.stroke();
+          octx.beginPath();octx.moveTo(x-3,y);octx.lineTo(x+3,y);octx.moveTo(x,y-3);octx.lineTo(x,y+3);octx.stroke()});
+        handlesOf(s).forEach((p,k)=>k<4?dot(p,k===selPt?9:7,k===selPt?col:'#000',col,String(k+1)):dot(p,k===selPt?6.5:5,k===selPt?col:'#000',col,''));
+      }
       if(selPt>=0){const[x,y]=toPx(handlesOf(s)[selPt]);octx.strokeStyle=col+'aa';octx.lineWidth=1;octx.beginPath();
         for(const[dx,dy]of[[-1,0],[1,0],[0,-1],[0,1]]){octx.moveTo(x+dx*12,y+dy*12);octx.lineTo(x+dx*30,y+dy*30)}octx.stroke()}
     }
     label(s.name,s.pts,on?col:'#aab');
   });
+  if(drag&&drag.snap){const[x,y]=toPx(drag.snap);octx.beginPath();octx.arc(x,y,13,0,7);octx.lineWidth=2;octx.strokeStyle='#fff';octx.stroke()}
   // masks
   project.masks.forEach((m,i)=>{
     if(m.pts.length<2)return;const on=selKind==='m'&&i===sel;
@@ -1171,8 +1330,13 @@ function drawOverlay(){
 
 // alignment guides drawn on the projected image itself: every outline, the selected item's handles,
 // and a full-screen crosshair through the selected point
-function drawAlign(ctx,w,h){
-  const P=p=>[p[0]*w,p[1]*h],path=pts=>{ctx.beginPath();pts.forEach((p,k)=>{const[x,y]=P(p);k?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.closePath()};
+function drawAlign(ctx,w,h,region){
+  const c=project.cal;ctx.save();
+  if(c.flipX){ctx.translate(w,0);ctx.scale(-1,1)}if(c.flipY){ctx.translate(0,h);ctx.scale(1,-1)}
+  drawGuides(ctx,w,h,region?x=>(x-region[0])/(region[1]-region[0]):x=>x);ctx.restore();
+}
+function drawGuides(ctx,w,h,X){
+  const P=p=>[X(p[0])*w,p[1]*h],path=pts=>{ctx.beginPath();pts.forEach((p,k)=>{const[x,y]=P(p);k?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.closePath()};
   ctx.lineJoin='round';
   project.surfaces.forEach((s,i)=>{if(!s.visible)return;const on=selKind==='s'&&i===sel;
     ctx.setLineDash(on?[]:[10,8]);ctx.lineWidth=on?3:1.5;ctx.strokeStyle=PALETTE[i%PALETTE.length];path(geometry(s).poly);ctx.stroke()});
@@ -1197,7 +1361,10 @@ ov.addEventListener('pointerdown',e=>{
   if(e.button!==0) return;
   const {x,y}=evtPos(e),n=toN(x,y),S=project.surfaces,M=project.masks;
   const near=(p,r=11)=>{const[a,b]=toPx(p);return (a-x)**2+(b-y)**2<r*r};
-  const start=(type,it)=>{drag={type,x:e.clientX,y:e.clientY,orig:clone({pts:it.pts,mesh:it.mesh||null})};ov.setPointerCapture(e.pointerId)};
+  const start=(type,it)=>{drag={type,x:e.clientX,y:e.clientY,orig:shapeOf(it)};
+    if(type!=='move'){const p=handlesOf(it)[selPt];drag.linked=e.shiftKey||!p?[]:linkedTo(it,p);  // Shift: pull this point away on its own
+      drag.targets=otherHandles(it).filter(h=>!drag.linked.some(l=>l.it===h.it&&l.k===h.k))}
+    ov.setPointerCapture(e.pointerId)};
   // 1. handles of the selected item
   if(selKind==='m'&&M[sel]&&M[sel].visible){const m=M[sel];
     for(let k=0;k<m.pts.length;k++)if(near(m.pts[k])){
@@ -1207,7 +1374,10 @@ ov.addEventListener('pointerdown',e=>{
       if(near(mid,8)){m.pts.splice(k+1,0,mid);selPt=k+1;start('mp',m);renderProps();return}}
   }
   if(selKind==='s'&&S[sel]&&S[sel].visible){const s=S[sel],H=handlesOf(s);
-    for(let k=0;k<H.length;k++)if(near(H[k],s.warp==='mesh'?9:13)){selPt=k;start('sp',s);coords();return}}
+    for(let k=0;k<H.length;k++)if(near(H[k],s.warp==='mesh'||k>=4?9:13)){
+      if(e.altKey&&delEdgePt(s,k)){selPt=-1;renderProps();scheduleSave();commit();return}
+      selPt=k;start('sp',s);coords();return}
+    if(s.warp!=='mesh')for(const a of edgeAdds(s))if(near(a.p,8)){selPt=addEdgePt(s,a.e,a.i,a.p);start('sp',s);renderProps();return}}
   // 2. corners of other quad surfaces
   for(let i=S.length-1;i>=0;i--){const s=S[i];if(!s.visible||s.warp==='mesh'||(selKind==='s'&&i===sel))continue;
     for(let k=0;k<4;k++)if(near(s.pts[k],13)){select('s',i);selPt=k;start('sp',s);coords();return}}
@@ -1224,8 +1394,12 @@ ov.addEventListener('pointermove',e=>{
   const it=selKind==='m'?project.masks[sel]:project.surfaces[sel];if(!it)return;
   const dx=(e.clientX-drag.x)/VR.w,dy=(e.clientY-drag.y)/VR.h;
   if(drag.type==='move'){shiftItem(it,dx,dy,drag.orig)}
-  else if(drag.type==='mp'){const o=drag.orig.pts[selPt];if(o)it.pts[selPt]=[o[0]+dx,o[1]+dy]}
-  else if(drag.type==='sp'){const src=it.warp==='mesh'?drag.orig.mesh.pts:drag.orig.pts,o=src[selPt];if(o){handlesOf(it)[selPt]=[o[0]+dx,o[1]+dy];syncCorners(it)}}
+  else{const o=handlesOf(drag.orig)[selPt];if(!o)return;let np=[o[0]+dx,o[1]+dy];drag.snap=null;
+    // snap onto another item's point within 10 screen px (hold Ctrl / Cmd to place freely)
+    if(!e.ctrlKey&&!e.metaKey){let best=10;const[px,py]=toPx(np);
+      for(const h of drag.targets){const[hx,hy]=toPx(h.p),d=Math.hypot(hx-px,hy-py);if(d<best){best=d;drag.snap=h.p}}
+      if(drag.snap)np=drag.snap.slice()}
+    setHandle(it,selPt,np);for(const l of drag.linked)setHandle(l.it,l.k,np.slice())}
   coords();
 });
 ov.addEventListener('pointerup',()=>{if(drag){const t=drag.type;drag=null;if(t!=='pan'){scheduleSave();commit()}}});
@@ -1240,20 +1414,31 @@ ov.addEventListener('contextmenu',e=>e.preventDefault());
 /* =====================================================================
    OUTPUT WINDOW
    ===================================================================== */
-let outWin=null,outR=null;
+const outs=new Map();   // projector number -> {w: window, R: renderer}
 const OUT_HTML=`<!doctype html><html><head><meta charset="utf-8"><title>Lumen Pin – Output</title>
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:none}canvas{display:block;width:100%;height:100%}#g{position:fixed;inset:0;pointer-events:none}
 #tip{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#ffb547;font:600 20px system-ui,sans-serif;cursor:pointer;background:rgba(0,0,0,.4);transition:opacity .3s}
 #tip small{color:#99a;font:400 13px system-ui,sans-serif}#tip.hide{opacity:0;pointer-events:none}</style></head>
 <body><canvas id="c"></canvas><canvas id="g"></canvas><div id="tip">Click to fill this screen<small>F toggles fullscreen · Esc exits · close this window to stop output</small></div></body></html>`;
-function openOutput(){
-  if(outWin&&!outWin.closed){outWin.focus();toast('Output window is already open');return}
-  const w=window.open('','lumen-pin-output','popup,width=960,height=540');
-  if(!w){toast('Pop-ups are blocked here. Open the downloaded file in Chrome, or use "This screen" (H).');return}
+const multiN=()=>project&&project.multi.n>1?project.multi.n:1;
+// the slice of the output canvas projector k shows (as 0..1 across), or null for a single projector
+function regionOf(k){const n=multiN();if(n<2)return null;const m=project.multi,W=project.output.w,x0=k*(m.pw-m.ov);return [x0/W,(x0+m.pw)/W]}
+// which slice the projector in position k shows: mirroring for rear projection also swaps left and right projectors
+const slotOf=k=>project.cal.flipX?multiN()-1-k:k;
+function blendOf(k){const n=multiN();if(n<2||!(project.multi.ov>0))return null;const m=project.multi,f=m.ov/m.pw;return {l:k>0?f:0,r:k<n-1?f:0,p:+m.curve||2,g:+m.gamma||2.2}}
+function applyMulti(){const m=project.multi;if(m.n>1)project.output={w:m.n*m.pw-(m.n-1)*m.ov,h:m.ph}}
+function outLive(){for(const [k,o] of outs)if(o.w.closed)outs.delete(k);return outs.size>0}
+const missingOut=()=>{const n=multiN();for(let k=0;k<n;k++)if(!outs.has(k))return k;return -1};
+let screensCache=null;
+async function otherScreens(){if(!('getScreenDetails' in window))return null;try{const sd=await window.getScreenDetails();
+  return sd.screens.filter(x=>x!==sd.currentScreen).sort((a,b)=>a.left-b.left)}catch(e){return null}}
+function openOutputs(){let k;while((k=missingOut())>=0){if(!openOutput(k))break}renderTop()}
+function openOutput(k=0){
+  const n=multiN(),w=window.open('','lumen-pin-output'+(k?'-'+k:''),'popup,width=960,height=540');
+  if(!w){toast(k?`The browser blocked the window for projector ${k+1}. Click "Open projector ${k+1}" to open it.`:'Pop-ups are blocked here. Open the downloaded file in Chrome, or use "This screen" (H).');return false}
   try{
-    w.document.open();w.document.write(OUT_HTML);w.document.close();
-    const d=w.document,tip=d.getElementById('tip');
-    outR=new Renderer(d.getElementById('c'));outWin=w;
+    w.document.open();w.document.write(OUT_HTML.replace('Lumen Pin – Output','Lumen Pin – Output'+(n>1?' · Projector '+(k+1):'')).replace('Click to fill this screen',n>1?'Projector '+(k+1)+' · click to fill this screen':'Click to fill this screen'));w.document.close();
+    const d=w.document,tip=d.getElementById('tip'),R=new Renderer(d.getElementById('c')),me={w,R};outs.set(k,me);
     const fs=()=>{if(d.fullscreenElement)d.exitFullscreen();else d.documentElement.requestFullscreen().catch(()=>{})};
     let idle;const wake=()=>{tip.classList.remove('hide');d.body.style.cursor='default';clearTimeout(idle);idle=setTimeout(()=>{tip.classList.add('hide');d.body.style.cursor='none'},2500)};
     tip.addEventListener('click',fs);d.addEventListener('mousemove',wake);wake();
@@ -1262,33 +1447,46 @@ function openOutput(){
     d.addEventListener('keyup',onKeyUp);
     const wl=()=>{try{if(w.navigator.wakeLock&&d.visibilityState==='visible')w.navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}};
     wl();d.addEventListener('visibilitychange',wl);
-    w.addEventListener('beforeunload',()=>{outWin=null;outR=null;renderTop()});
+    w.addEventListener('beforeunload',()=>{if(outs.get(k)===me)outs.delete(k);renderTop()});
     const gc=d.getElementById('g'),gx=gc.getContext('2d');let guides=false;
     // this loop also advances audio, tempo and scene playback, so the show keeps running when the editor window is hidden
-    const loop=()=>{if(w.closed||outWin!==w)return;
-      try{outR.fit(w);const t=tick();outR.draw(drawList(t),t,{testGrid,blackout,master:project.master});
+    const loop=()=>{if(w.closed||outs.get(k)!==me)return;
+      try{R.fit(w);const t=tick(),j=slotOf(k);R.draw(outList(t),t,{testGrid,blackout,master:project.master,masks:outMasks(),region:regionOf(j),blend:blendOf(j)});
         if(align||guides){const dpr=w.devicePixelRatio||1,cw=w.innerWidth,ch=w.innerHeight;
           if(gc.width!==Math.round(cw*dpr)||gc.height!==Math.round(ch*dpr)){gc.width=Math.round(cw*dpr);gc.height=Math.round(ch*dpr)}
-          gx.setTransform(dpr,0,0,dpr,0,0);gx.clearRect(0,0,cw,ch);if(align)drawAlign(gx,cw,ch);guides=align}
+          gx.setTransform(dpr,0,0,dpr,0,0);gx.clearRect(0,0,cw,ch);if(align)drawAlign(gx,cw,ch,regionOf(j));guides=align}
       }catch(e){console.error(e)}w.requestAnimationFrame(loop)};
     w.requestAnimationFrame(loop);
-    const hint=()=>toast('Drag the output window onto the projector, then click it to fill the screen.');
-    if('getScreenDetails' in window){window.getScreenDetails().then(sd=>{
-      const other=sd.screens.find(s=>s!==sd.currentScreen&&!s.isPrimary)||sd.screens.find(s=>s!==sd.currentScreen);
-      if(other&&!w.closed){w.moveTo(other.availLeft,other.availTop);w.resizeTo(other.availWidth,other.availHeight);toast('Output window moved to '+(other.label||'the second screen')+'. Click it to fill the screen.')}
-      else hint();
-    }).catch(hint)}
-    else hint();
-  }catch(e){toast('Could not set up the output window: '+e.message);try{w.close()}catch(_){}outWin=null}
-  renderTop();
+    const hint=()=>toast(n>1?`Drag projector ${k+1}'s window onto that projector, then click it to fill the screen.`:'Drag the output window onto the projector, then click it to fill the screen.');
+    otherScreens().then(sc=>{
+      const other=sc&&sc.length?sc[Math.min(k,sc.length-1)]:null;
+      if(other&&!w.closed){w.moveTo(other.availLeft,other.availTop);w.resizeTo(other.availWidth,other.availHeight);toast((n>1?'Projector '+(k+1)+' window':'Output window')+' moved to '+(other.label||'screen '+(k+2))+'. Click it to fill the screen.')}
+      else hint()});
+  }catch(e){toast('Could not set up the output window: '+e.message);try{w.close()}catch(_){}outs.delete(k);return false}
+  renderTop();return true;
 }
-function closeOutput(){if(outWin&&!outWin.closed)outWin.close();outWin=null;outR=null;renderTop()}
+function closeOutput(){for(const o of outs.values())if(!o.w.closed)o.w.close();outs.clear();renderTop()}
 function syncOutputSize(){
-  if(!outWin) return;
-  if(outWin.closed){outWin=null;outR=null;renderTop();return}
-  const dpr=outWin.devicePixelRatio||1,w=Math.round(outWin.innerWidth*dpr),h=Math.round(outWin.innerHeight*dpr);
+  if(!outLive()||multiN()>1)return;const o=outs.get(0);if(!o)return;
+  const dpr=o.w.devicePixelRatio||1,w=Math.round(o.w.innerWidth*dpr),h=Math.round(o.w.innerHeight*dpr);
   if(w>50&&h>50&&(w!==project.output.w||h!==project.output.h)){project.output={w,h};computeView();renderTop();coords();scheduleSave()}
 }
+
+/* =====================================================================
+   BLIND EDITING  (the output holds a frozen copy, the "program", until Go)
+   ===================================================================== */
+let blind=false,program=null,progFade=null;
+const snapProg=()=>({surfaces:project.surfaces.map(s=>Object.assign(clone(s),{_ck:'#p'})),masks:clone(project.masks)});
+function outList(t){if(!program)return drawList(t);const L=fadeList(program.surfaces,progFade,t);if(!L)progFade=null;return L||program.surfaces}
+const outMasks=()=>program?program.masks:project.masks;
+// send the editor's state to the output, using the current scene's transition
+function goLive(){
+  if(!blind)return;const old=program,sc=curScene(),tr=sc&&sc.trans||'fade',dur=+(sc&&sc.fade)||0;
+  program=snapProg();
+  progFade=old&&dur>0&&tr!=='cut'?{from:Object.fromEntries(old.surfaces.map(x=>[x.id,Object.assign({},x,{_ck:'#o'})])),t0:now(),dur,type:tr}:null;
+}
+function setBlind(on){blind=on;program=on?snapProg():null;progFade=null;renderTop();computeView();
+  toast(on?'Blind: the output holds still while you edit. Press Go (Enter) to send changes; scene changes go out too.':'Output follows your edits again.')}
 
 /* =====================================================================
    UNDO / REDO
@@ -1310,11 +1508,12 @@ const PRESETS=[[1920,1080],[1280,720],[1280,800],[1920,1200],[1024,768],[1400,10
 function renderTop(){
   if(!project) return;
   $('projBtn').textContent=project.name+' ▾';
-  const o=project.output,s=$('outSize'),live=outWin&&!outWin.closed;
+  const o=project.output,s=$('outSize'),live=outLive(),n=multiN(),miss=missingOut();
   let html=PRESETS.map(([w,h])=>`<option value="${w}x${h}">${w}×${h}</option>`).join('');
   if(!PRESETS.some(([w,h])=>w===o.w&&h===o.h)) html=`<option value="${o.w}x${o.h}">${o.w}×${o.h}${live?' (from window)':''}</option>`+html;
-  s.innerHTML=html;s.value=`${o.w}x${o.h}`;s.disabled=!!live;s.title=live?'Matched to the output window':'Projector resolution';
-  const b=$('outBtn');b.textContent=live?'Output live · Close':'Open output window';b.classList.toggle('live',!!live);
+  s.innerHTML=html;s.value=`${o.w}x${o.h}`;s.disabled=live&&n===1||n>1;s.title=n>1?'Set by the projector layout (Output & projectors)':live?'Matched to the output window':'Projector resolution';
+  const b=$('outBtn');b.textContent=!live?(n>1?`Open ${n} output windows`:'Open output window'):miss>=0?`Open projector ${miss+1}`:'Output live · Close';b.classList.toggle('live',live&&miss<0);
+  $('blindBtn').classList.toggle('on',blind);$('goBtn').hidden=!blind;
   $('testBtn').classList.toggle('on',testGrid);$('blackBtn').classList.toggle('on',blackout);$('alignBtn').classList.toggle('on',align);
   renderUndo();
 }
@@ -1361,6 +1560,7 @@ function renderProps(){
   const picker=CATS.map(c=>`<div class="cat">${c}</div><div class="chips">${SHADERS.filter(x=>x.cat===c).map(x=>
     `<button class="chip${x.id===def.id?' on':''}" data-shader="${x.id}"><div class="th" data-thumb="${x.id}" style="${thumbs[x.id]?`background-image:url(${thumbs[x.id]})`:''}">${({media:'IMG / VID',text:'TEXT',custom:'GLSL'})[x.id]||''}</div><span>${esc(x.name)}</span></button>`).join('')}</div>`).join('');
   const pctl=def.params.map(d=>{const id='pp_'+d.k,v=prm[d.k];
+    if(def.id==='media'&&d.k[0]==='v'&&!isFileVideo(s.mediaId))return '';  // playback options only for video files
     if(d.t==='text')return `<label for="${id}">${d.l}</label><textarea id="${id}" data-k="${d.k}" data-str="1" rows="3" style="height:auto">${esc(v)}</textarea>`;
     if(d.t==='font')return `<label for="${id}">${d.l}</label><select id="${id}" data-k="${d.k}" data-str="1">${d.opts.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
     if(d.t==='code')return `<label for="codeBox" style="grid-column:1/-1">Shader code</label><textarea id="codeBox" class="code" spellcheck="false" style="grid-column:1/-1">${esc(v)}</textarea>
@@ -1369,7 +1569,7 @@ function renderProps(){
     if(d.t==='color')return `<label for="${id}">${d.l}</label><input type="color" id="${id}" data-k="${d.k}" value="${v}">`;
     if(d.t==='select')return `<label for="${id}">${d.l}</label><select id="${id}" data-k="${d.k}">${d.opts.map((o,i)=>`<option value="${i}"${+v===i?' selected':''}>${o}</option>`).join('')}</select>`;
     return `<label for="${id}">${d.l}</label><div class="rng"><input type="range" id="${id}" data-k="${d.k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${v}"><output>${fmt(v)}</output></div>`;}).join('');
-  const mesh=s.warp==='mesh',opts=n=>[1,2,3,4,5,6,8].map(v=>`<option value="${v}"${v===n?' selected':''}>${v}</option>`).join('');
+  const mesh=s.warp==='mesh',opts=n=>[1,2,3,4,5,6,8,10,12,16].map(v=>`<option value="${v}"${v===n?' selected':''}>${v}</option>`).join('');
   const nm=masksFor(s).length,rl=s.roundLinked!==false;
   P.innerHTML=`
   <section>
@@ -1395,11 +1595,14 @@ function renderProps(){
       <label>Warp</label><div class="seg"><button data-warp="quad" class="${mesh?'':'on'}">Corner pin</button><button data-warp="mesh" class="${mesh?'on':''}">Mesh</button></div>
       ${mesh?`<label for="mCols">Grid</label><div class="row" style="flex-wrap:nowrap"><select id="mCols" title="Cells across">${opts(s.mesh.cols)}</select><span class="note">×</span><select id="mRows" title="Cells down">${opts(s.mesh.rows)}</select></div>
       <label>Curves</label><div class="seg"><button data-smooth="1" class="${s.mesh.smooth!==false?'on':''}">Smooth</button><button data-smooth="0" class="${s.mesh.smooth===false?'on':''}">Straight</button></div>`:''}
+      ${!mesh&&hasEdges(s)?`<label>Edges</label><div class="seg"><button data-esmooth="1" class="${s.edgeSmooth!==false?'on':''}" title="Edges curve smoothly through their points">Curved</button><button data-esmooth="0" class="${s.edgeSmooth===false?'on':''}" title="Straight lines between points">Straight</button></div>`:''}
       ${rangeRow('rAll',rl?'Rounding':'Top left',0,1,.01,s.round[0])}
       ${rl?'':rangeRow('rTR','Top right',0,1,.01,s.round[1])+rangeRow('rBR','Bottom right',0,1,.01,s.round[2])+rangeRow('rBL','Bottom left',0,1,.01,s.round[3])}
       <label>Corners</label><div class="seg"><button data-link="1" class="${rl?'on':''}">All same</button><button data-link="0" class="${rl?'':'on'}">Each</button></div>
     </div>
-    ${mesh?'<div class="note">Drag any point to bend the surface around curves. Corners are numbered 1–4.</div>':''}
+    ${mesh?'<div class="note">Drag any point to bend the surface around curves. Corners are numbered 1–4.</div>'
+      :`<div class="note">Click a + on an edge to add a point there, then drag it to follow a curve or an angle. Alt-click a point or press Delete to remove it.</div>
+      ${hasEdges(s)?'<div class="row"><button id="clearEdges">Remove edge points</button></div>':''}`}
     <div class="row"><button id="addCrop" title="Add a mask that keeps only the area you draw">Crop to custom shape</button><button id="addHole" title="Add a mask that hides an area">Cut a hole</button></div>
     ${nm?`<div class="note">${nm} mask${nm===1?'':'s'} affect${nm===1?'s':''} this surface.</div>`:''}
   </section>
@@ -1413,6 +1616,18 @@ function renderProps(){
       <label for="cRot">Rotate</label><select id="cRot">${[0,1,2,3].map(r=>`<option value="${r}"${+s.rot===r?' selected':''}>${r*90}°</option>`).join('')}</select>
       <label>Flip</label><div class="row"><button id="cFlipX" class="${s.flipX?'on':''}">Horizontal</button><button id="cFlipY" class="${s.flipY?'on':''}">Vertical</button></div>
     </div>
+  </section>
+  <section>
+    <details class="fold"${gradeOpen?' open':''} id="gradeFold"><summary><span class="lbl">Color correction${isGraded(s)?' · on':''}</span></summary>
+    <div class="fold-body"><div class="grid2">
+      ${rangeRow('gGamma','Gamma',.3,3,.01,s.grade.gamma).replace('<input','<input data-g="gamma"')}
+      ${rangeRow('gContrast','Contrast',0,2,.01,s.grade.contrast).replace('<input','<input data-g="contrast"')}
+      ${rangeRow('gSat','Saturation',0,2,.01,s.grade.sat).replace('<input','<input data-g="sat"')}
+      ${rangeRow('gHue','Hue shift',-180,180,1,s.grade.hue).replace('<input','<input data-g="hue"')}
+      ${rangeRow('gWarm','Cool / warm',-1,1,.01,s.grade.warm).replace('<input','<input data-g="warm"')}
+    </div>
+    <div class="note">Corrects for the surface itself: lift dark or colored materials, or match neighbouring surfaces. Applies in every scene.</div>
+    <div class="row"><button id="gReset">Reset color</button></div></div></details>
   </section>
   <section>
     <span class="lbl">Audio reaction</span>
@@ -1436,6 +1651,8 @@ function renderProps(){
   if(def.id==='media') fillMediaSelect(s);
   if(def.id==='custom') showCodeErr(prm.code||'');
 }
+let gradeOpen=false;
+const isGraded=s=>Object.keys(GRADE0).some(k=>+s.grade[k]!==GRADE0[k]);
 function liveRow(id){
   const m=mediaCache.get(id),screen=id==='live:screen';
   const st=!m?'Starting…':m.ready?'Live: '+m.name:m.starting?'Waiting for permission…':m.error?m.error:m.waiting?(screen?'Not sharing yet':'Stopped'):'Starting…';
@@ -1492,10 +1709,10 @@ function coords(){
   if(selKind==='m'){const m=project.masks[sel];if(!m)return;
     el.innerHTML=`<span>${m.pts.length} points</span><span class="on">${selPt>=0&&m.pts[selPt]?'Point '+(selPt+1)+': '+f(m.pts[selPt]):'No point selected'}</span>`;return}
   const s=project.surfaces[sel];if(!s)return;
-  if(s.warp==='mesh'){const H2=handlesOf(s);el.innerHTML=`<span>${H2.length} points</span><span class="on">${selPt>=0&&H2[selPt]?'Point '+(selPt+1)+': '+f(H2[selPt]):'No point selected'}</span>`}
+  const H2=handlesOf(s);if(H2.length>4){el.innerHTML=`<span>${H2.length} points</span><span class="on">${selPt>=0&&H2[selPt]?'Point '+(selPt+1)+': '+f(H2[selPt]):'No point selected'}</span>`}
   else el.innerHTML=s.pts.map((p,k)=>`<span class="${k===selPt?'on':''}">${k+1}: ${f(p)}</span>`).join('');
 }
-function renderAll(){renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderMidi()}
+function renderAll(){renderOutPanel();renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderMidi()}
 
 /* property events (delegated, so they survive re-renders) */
 $('props').addEventListener('input',e=>{
@@ -1510,6 +1727,7 @@ $('props').addEventListener('input',e=>{
   if(t.dataset.rf){const r=s.reactions[+t.dataset.ri];if(r)r[t.dataset.rf]=t.dataset.rf==='amount'?+t.value:t.value}
   else if(t.dataset.k){const p=paramsOf(s);p[t.dataset.k]=t.type==='color'||t.dataset.str?t.value:+t.value}
   else if(t.id==='sName'){s.name=t.value;renderList()}
+  else if(t.dataset.g){s.grade[t.dataset.g]=+t.value}
   else if(t.id==='cSpeed')setSpeed(s,+t.value);
   else if(t.id==='cBright')s.bright=+t.value;
   else if(t.id==='cOpac')s.opac=+t.value;
@@ -1534,7 +1752,7 @@ $('props').addEventListener('change',async e=>{
     await loadMedia(s.mediaId);return}
   if(t.id==='mediaFile'){const f=t.files[0];if(!f)return;
     if(f.size>400*1024*1024){toast('That file is over 400 MB. Try a smaller export.');return}
-    try{s.mediaId=await addMediaFile(f);scheduleSave();commit();fillMediaSelect(s);toast('Saved '+f.name+' to this project')}
+    try{s.mediaId=await addMediaFile(f);scheduleSave();commit();renderProps();toast('Saved '+f.name+' to this project')}
     catch(err){toast('Could not store that file: '+(err&&err.name||err))}return}
   if(t.id==='mCols'||t.id==='mRows'){setMesh(s,+$('mCols').value,+$('mRows').value);selPt=-1;renderProps();scheduleSave();commit();return}
   commit();
@@ -1549,6 +1767,7 @@ $('props').addEventListener('click',e=>{
   const s=project.surfaces[sel];if(!s)return;
   if(id==='codeRun'){runCode();return}
   if(id==='codeReset'){paramsOf(s,'custom').code=DEFAULT_CODE;renderProps();scheduleSave();commit();return}
+  if(id==='gReset'){s.grade=Object.assign({},GRADE0);renderProps();scheduleSave();commit();return}
   if(id==='liveStart'){loadLive(s.mediaId,true);return}
   if(id==='liveStop'){stopLive(s.mediaId);renderProps();return}
   if(b.dataset.space){s.space=b.dataset.space;renderProps();scheduleSave();commit();return}
@@ -1557,8 +1776,10 @@ $('props').addEventListener('click',e=>{
   const chip=b.closest('[data-shader]');
   if(chip){s.shader=chip.dataset.shader;paramsOf(s);renderProps();renderList();const d=$('picker');if(d)d.open=false;scheduleSave();commit();return}
   if(b.dataset.warp){const w=b.dataset.warp;if(w===s.warp)return;
-    if(w==='mesh')setMesh(s,s.mesh?s.mesh.cols:3,s.mesh?s.mesh.rows:3);else{syncCorners(s);s.warp='quad'}
-    selPt=-1;renderProps();renderList();scheduleSave();commit();if(w==='quad')toast('Back to corner pin. Curves from the mesh were flattened.');return}
+    if(w==='mesh')setMesh(s,s.mesh?s.mesh.cols:3,s.mesh?s.mesh.rows:3);else meshToQuad(s);
+    selPt=-1;renderProps();renderList();scheduleSave();commit();if(w==='quad')toast(hasEdges(s)?'Back to corner pin. The mesh border became edge points; inner bends were flattened.':'Back to corner pin.');return}
+  if(b.dataset.esmooth){s.edgeSmooth=b.dataset.esmooth==='1';renderProps();scheduleSave();commit();return}
+  if(id==='clearEdges'){s.edges=noEdges();selPt=-1;renderProps();scheduleSave();commit();return}
   if(b.dataset.smooth){s.mesh.smooth=b.dataset.smooth==='1';renderProps();scheduleSave();commit();return}
   if(b.dataset.link){s.roundLinked=b.dataset.link==='1';if(s.roundLinked)s.round=[s.round[0],s.round[0],s.round[0],s.round[0]];renderProps();scheduleSave();commit();return}
   if(id==='addCrop'){const k=maskDefaults(s.name+' crop',s.pts.map(p=>p.slice()),'show',s.id);project.masks.push(k);select('m',project.masks.length-1);toast('Drag the points to the shape you want. Click a + to add points.');scheduleSave();commit();return}
@@ -1568,12 +1789,13 @@ $('props').addEventListener('click',e=>{
   else if(id==='aDup')return duplicate();
   else if(id==='aUp'){if(sel<project.surfaces.length-1){const S=project.surfaces;[S[sel],S[sel+1]]=[S[sel+1],S[sel]];sel++;renderAll()}else return}
   else if(id==='aDown'){if(sel>0){const S=project.surfaces;[S[sel],S[sel-1]]=[S[sel-1],S[sel]];sel--;renderAll()}else return}
-  else if(id==='aReset'){const rect=[[.3,.3],[.7,.3],[.7,.7],[.3,.7]];if(s.warp==='mesh'){const c=s.mesh.cols,r=s.mesh.rows;s.warp='quad';s.pts=rect;setMesh(s,c,r)}else s.pts=rect;selPt=-1;coords()}
+  else if(id==='aReset'){const rect=[[.3,.3],[.7,.3],[.7,.7],[.3,.7]];s.edges=noEdges();if(s.warp==='mesh'){const c=s.mesh.cols,r=s.mesh.rows;s.warp='quad';s.pts=rect;setMesh(s,c,r)}else s.pts=rect;selPt=-1;renderProps()}
   else if(id==='aDel'){return arm(b,'Click again to delete',()=>{const gone=project.surfaces.splice(sel,1)[0];project.masks=project.masks.filter(m=>m.target!==gone.id);
     sel=Math.max(0,sel-1);selPt=-1;renderAll();scheduleSave();commit()})}
   else return;
   scheduleSave();commit();
 });
+$('props').addEventListener('toggle',e=>{if(e.target.id==='gradeFold')gradeOpen=e.target.open},true);
 $('props').addEventListener('keydown',e=>{
   if(e.target.id!=='codeBox')return;
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runCode()}
@@ -1590,7 +1812,7 @@ function duplicate(){
   if(selKind==='m'){const m=project.masks[sel];if(!m)return;
     const c=clone(m);c.id=uid('k');c.name=m.name+' copy';c.pts=m.pts.map(([x,y])=>[x+.03,y+.03]);project.masks.splice(sel+1,0,c);select('m',sel+1);scheduleSave();commit();return}
   const s=project.surfaces[sel];if(!s)return;
-  const c=clone(s);c.id=uid('s');c.name=s.name+' copy';shiftItem(c,.03,.03,clone({pts:s.pts,mesh:s.mesh}));
+  const c=clone(s);c.id=uid('s');c.name=s.name+' copy';shiftItem(c,.03,.03,shapeOf(s));
   project.masks.filter(m=>m.target===s.id).forEach(m=>{const k=clone(m);k.id=uid('k');k.target=c.id;k.name=m.name.replace(s.name,c.name);k.pts=m.pts.map(([x,y])=>[x+.03,y+.03]);project.masks.push(k)});
   project.surfaces.splice(sel+1,0,c);select('s',sel+1);scheduleSave();commit();
 }
@@ -1621,14 +1843,17 @@ $('testBtn').onclick=()=>{testGrid=!testGrid;renderTop()};
 $('blackBtn').onclick=()=>{blackout=!blackout;renderTop()};
 $('alignBtn').onclick=()=>{align=!align;renderTop()};
 $('outSize').onchange=e=>{const[w,h]=e.target.value.split('x').map(Number);project.output={w,h};computeView();coords();scheduleSave();commit()};
-$('outBtn').onclick=()=>{outWin&&!outWin.closed?closeOutput():openOutput()};
+$('outBtn').onclick=()=>{outLive()&&missingOut()<0?closeOutput():openOutputs()};
+$('blindBtn').onclick=()=>setBlind(!blind);
+$('goBtn').onclick=()=>{goLive();toast('Sent to the output')};
 $('singleBtn').onclick=()=>setSingle(true);
-function setSingle(on){document.body.classList.toggle('output',on);layout();if(on){toast('Editor hidden. Press H or Esc to come back.');document.documentElement.requestFullscreen?.().catch(()=>{})}}
+function setSingle(on,quiet){document.body.classList.toggle('output',on);layout();if(!on&&player)stopPlayer();
+  if(on&&!quiet){toast('Editor hidden. Press H or Esc to come back.');document.documentElement.requestFullscreen?.().catch(()=>{})}}
 
 /* scenes bar */
 function renderScenes(){
   if(!project)return;
-  $('sceneChips').innerHTML=project.scenes.map((x,i)=>`<button class="schip${x.id===project.activeScene?' on':''}${pendingGo&&pendingGo.i===i?' pend':''}" data-sc="${i}" title="Shift+${i+1}"><span class="n">${i+1}</span>${esc(x.name)}${+x.hold>0?`<span class="n">${x.hold}s</span>`:''}</button>`).join('');
+  $('sceneChips').innerHTML=project.scenes.map((x,i)=>`<button class="schip${x.id===project.activeScene?' on':''}${pendingGo&&pendingGo.i===i?' pend':''}" data-sc="${i}" title="Shift+${i+1}"><span class="n">${i+1}</span>${esc(x.name)}${+x.hold>0?`<span class="n">${x.hold}s</span>`:''}${hasCue(x)?`<span class="n">♪${fmtT(+x.cue)}</span>`:''}</button>`).join('');
   $('scenePlay').textContent=playing?'■ Stop':'▶ Play';$('scenePlay').classList.toggle('on',playing);
   $('master').value=project.master;
 }
@@ -1636,9 +1861,11 @@ function renderScenePanel(){
   const sc=curScene(),P=$('scenePanel');if(!sc)return;
   P.innerHTML=`<div class="row between"><span class="lbl">Scene settings</span><button class="ghost" id="spClose" title="Close">✕</button></div>
   <div class="grid2"><label for="spName">Name</label><input type="text" id="spName" value="${esc(sc.name)}">
-  <label for="spFade">Fade in (s)</label><input type="number" id="spFade" min="0" max="20" step="0.1" value="${sc.fade}">
-  <label for="spHold">Hold (s)</label><input type="number" id="spHold" min="0" max="3600" step="1" value="${sc.hold}"></div>
-  <div class="note">A scene remembers each surface's content, colors, speed, brightness, visibility and audio reactions. Shapes and masks are shared by all scenes. Hold is how long Play stays here; 0 means stay until you switch.</div>
+  <label for="spTrans">Transition</label><select id="spTrans">${[['fade','Crossfade'],['black','Through black'],['wipe','Wipe'],['cascade','Cascade (one surface after another)'],['cut','Cut']].map(([v,l])=>`<option value="${v}"${(sc.trans||'fade')===v?' selected':''}>${l}</option>`).join('')}</select>
+  <label for="spFade">Length (s)</label><input type="number" id="spFade" min="0" max="20" step="0.1" value="${sc.fade}">
+  <label for="spHold">Hold (s)</label><input type="number" id="spHold" min="0" max="3600" step="1" value="${sc.hold}">
+  <label for="spCue">Music cue (s)</label><div class="row" style="flex-wrap:nowrap"><input type="number" id="spCue" min="0" step="0.1" value="${hasCue(sc)?sc.cue:''}" placeholder="none"><button id="spCueNow" title="Use the music's current position">Now</button></div></div>
+  <div class="note">A scene remembers each surface's content, colors, speed, brightness, visibility and audio reactions. Shapes and masks are shared by all scenes. Hold is how long Play stays here; 0 means stay until you switch. A music cue starts this scene at that moment of the music file when Scenes follow cues is on.</div>
   <div class="row"><button id="spLeft" class="icon" title="Move left">◀</button><button id="spRight" class="icon" title="Move right">▶</button><button id="spDup">Duplicate</button><button id="spDel" class="danger">Delete scene</button></div>`;
 }
 $('sceneChips').addEventListener('click',e=>{const b=e.target.closest('[data-sc]');if(b)cueScene(+b.dataset.sc)});
@@ -1651,10 +1878,12 @@ $('scenePlay').onclick=togglePlay;
 $('sceneEditBtn').onclick=()=>{const P=$('scenePanel');P.hidden=!P.hidden;if(!P.hidden)renderScenePanel()};
 $('master').oninput=e=>{project.master=+e.target.value;scheduleSave()};
 $('scenePanel').addEventListener('input',e=>{const sc=curScene(),t=e.target;
-  if(t.id==='spName')sc.name=t.value;else if(t.id==='spFade')sc.fade=clamp(+t.value||0,0,20);else if(t.id==='spHold')sc.hold=clamp(+t.value||0,0,3600);else return;
+  if(t.id==='spName')sc.name=t.value;else if(t.id==='spFade')sc.fade=clamp(+t.value||0,0,20);else if(t.id==='spTrans')sc.trans=t.value;else if(t.id==='spHold')sc.hold=clamp(+t.value||0,0,3600);else if(t.id==='spCue'){sc.cue=t.value===''?null:Math.max(0,+t.value);lastCueIdx=-2}else return;
   renderScenes();scheduleSave()});
 $('scenePanel').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const sc=curScene(),S=project.scenes,i=S.indexOf(sc);
   if(b.id==='spClose'){$('scenePanel').hidden=true;return}
+  if(b.id==='spCueNow'){const el=musicEl();if(!el){toast('Choose a music file in the Audio panel first');return}
+    sc.cue=Math.round(el.currentTime*10)/10;lastCueIdx=-2;renderScenePanel();renderScenes();scheduleSave();return}
   if(b.id==='spLeft'&&i>0){[S[i-1],S[i]]=[S[i],S[i-1]];renderScenes()}
   else if(b.id==='spRight'&&i<S.length-1){[S[i+1],S[i]]=[S[i],S[i+1]];renderScenes()}
   else if(b.id==='spDup'){storeLook();const c=clone(sc);c.id=uid('c');c.name=sc.name+' copy';S.splice(i+1,0,c);project.activeScene=c.id;renderScenes();renderScenePanel()}
@@ -1666,7 +1895,7 @@ $('scenePanel').addEventListener('click',e=>{const b=e.target.closest('button');
 function renderAudio(){
   if(!project)return;
   document.querySelectorAll('#aSrc [data-asrc]').forEach(b=>b.classList.toggle('on',b.dataset.asrc===AUD.mode));
-  $('aFileRow').hidden=AUD.mode!=='file';$('aDevRow').hidden=AUD.mode!=='mic';
+  $('aFileRow').hidden=AUD.mode!=='file';$('tlRow').hidden=AUD.mode!=='file';$('aFollow').checked=!!project.audio.follow;$('aDevRow').hidden=AUD.mode!=='mic';
   const id=project.audio.mediaId,m=id&&mediaCache.get(id);
   $('aName').textContent=AUD.mode==='file'?(m?'♪ '+m.name:'No music file chosen yet.'):AUD.mode==='mic'?(AUD.active?'Listening to the microphone.':'Waiting for microphone permission…'):'Audio is off. Surfaces with reactions keep their normal look.';
   $('aPick').textContent=id?'Change music…':'Choose music…';
@@ -1721,6 +1950,7 @@ function onKey(e){
   const single=document.body.classList.contains('output');
   if(e.key==='Escape'){if(single)setSingle(false);else{selPt=-1;coords()}return}
   if(typing) return;
+  if(e.key==='Enter'&&blind&&tag!=='button'&&tag!=='select'){e.preventDefault();goLive();toast('Sent to the output');return}
   const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
   if(e.key===' '&&!single){e.preventDefault();spaceDown=true;ov.classList.add('pan');return}
   if(mod&&k==='z'){e.preventDefault();e.shiftKey?redoF():undo();return}
@@ -1731,7 +1961,7 @@ function onKey(e){
   if(k==='h'){setSingle(!single);return}
   if(k==='g'){testGrid=!testGrid;renderTop();return}
   if(k==='b'){blackout=!blackout;renderTop();return}
-  if(k==='o'){outWin&&!outWin.closed?outWin.focus():openOutput();return}
+  if(k==='o'){outLive()&&missingOut()<0?outs.values().next().value.w.focus():openOutputs();return}
   if(k==='a'){align=!align;renderTop();return}
   if(single&&!align) return;  // with Align on, corners can be nudged while looking at the projected image
   if(k==='x'){xray=!xray;renderViewPanel();return}
@@ -1741,11 +1971,13 @@ function onKey(e){
   if(e.key==='Tab'&&arr.length){e.preventDefault();const n=arr.length;select(selKind,(sel+(e.shiftKey?-1:1)+n)%n);return}
   if((e.key==='Delete'||e.key==='Backspace')&&selKind==='m'&&it&&selPt>=0){e.preventDefault();
     if(it.pts.length>3){it.pts.splice(selPt,1);selPt=-1;coords();scheduleSave();commit()}else toast('A mask needs at least 3 points');return}
+  if((e.key==='Delete'||e.key==='Backspace')&&selKind==='s'&&it&&selPt>=0){e.preventDefault();
+    if(delEdgePt(it,selPt)){selPt=-1;renderProps();scheduleSave();commit()}else if(it.warp!=='mesh')toast('Corners can’t be removed. Add points with the + markers on the edges.');return}
   if('1234'.includes(e.key)&&e.key.length===1&&it){selPt=selKind==='m'?Math.min(+e.key-1,it.pts.length-1):cornerIndex(it,+e.key-1);coords();return}
   const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
   if(d&&it){e.preventDefault();const st=e.shiftKey?10:1,dx=d[0]*st/project.output.w,dy=d[1]*st/project.output.h;
-    if(e.altKey||selPt<0)shiftItem(it,dx,dy,clone({pts:it.pts,mesh:it.mesh||null}));
-    else{const H=selKind==='m'?it.pts:handlesOf(it);if(H[selPt]){H[selPt]=[H[selPt][0]+dx,H[selPt][1]+dy];if(selKind==='s')syncCorners(it)}}
+    if(e.altKey||selPt<0)shiftItem(it,dx,dy,shapeOf(it));
+    else{const p=handlesOf(it)[selPt];if(p){const np=[p[0]+dx,p[1]+dy];for(const l of linkedTo(it,p))setHandle(l.it,l.k,np.slice());setHandle(it,selPt,np)}}
     coords();scheduleSave();clearTimeout(nudgeTimer);nudgeTimer=setTimeout(commit,500)}
 }
 
@@ -1754,7 +1986,7 @@ function onKey(e){
    ===================================================================== */
 async function openProject(p){
   project=normProject(p);selKind='s';sel=0;selPt=-1;ensureScenes();fadeState=null;playing=false;
-  pendingGo=null;MIDI.learn=-1;TEMPO.taps=[];TEMPO.t0=now();pruneLive();
+  pendingGo=null;MIDI.learn=-1;lastCueIdx=-2;if(blind){blind=false;program=null;progFade=null}if(outs.size)closeOutput();TEMPO.taps=[];TEMPO.t0=now();pruneLive();
   if(AUD.mode==='file')audioSet('off');
   project.surfaces.forEach(s=>loadMedia(s.mediaId));loadMedia(project.bg.mediaId);
   hist=[snap()];redo=[];ls.set('lumen-pin-last',p.id);
@@ -1767,7 +1999,7 @@ async function renderDrawer(){
     <div class="pmain" data-open="${p.id}"><div class="pn">${esc(p.name)}</div>
     <div class="pm">${p.surfaces.length} surface${p.surfaces.length===1?'':'s'}${(p.masks||[]).length?' · '+p.masks.length+' mask'+(p.masks.length===1?'':'s'):''} · ${(p.output||{w:1920}).w}×${(p.output||{h:1080}).h} · ${new Date(p.updated).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div></div>
     <button data-ren="${p.id}">Rename</button><button data-dup="${p.id}">Duplicate</button><button class="danger" data-del="${p.id}">Delete</button></div>`).join('');
-  storageInfo();
+  storageInfo();renderPlayerSettings();
 }
 async function storageInfo(){
   const el=$('storeInfo');let txt=storageOK?'Projects and media are stored in this browser on this computer. Export a .json to move them to another machine.':'Browser storage is unavailable, so media is kept for this session only. Export a .json to keep your work.';
@@ -1847,6 +2079,98 @@ function buildThumbs(){
 }
 
 /* =====================================================================
+   MUSIC CUES  (scenes start at set moments of the music file)
+   ===================================================================== */
+const hasCue=sc=>sc.cue!=null&&sc.cue!==''&&isFinite(+sc.cue);
+const fmtT=x=>Math.floor(x/60)+':'+String(Math.floor(x%60)).padStart(2,'0')+'.'+Math.floor(x*10%10);
+const musicEl=()=>{const id=project.audio.mediaId,m=id&&mediaCache.get(id);return m&&m.el||null};
+let lastCueIdx=-2;
+function cueFollow(){
+  if(!project.audio.follow||AUD.mode!=='file')return;const el=musicEl();if(!el)return;
+  const ct=el.currentTime;let best=-1,bt=-1;
+  project.scenes.forEach((sc,i)=>{if(hasCue(sc)&&+sc.cue<=ct&&+sc.cue>=bt){bt=+sc.cue;best=i}});
+  if(best!==lastCueIdx){lastCueIdx=best;if(best>=0&&project.scenes[best].id!==project.activeScene){goScene(best);renderScenes()}}
+}
+function drawTimeline(){
+  const c=$('tl');if(!c||$('tlRow').hidden||!$('audioFold').open||!c.clientWidth)return;
+  const dpr=Math.min(devicePixelRatio||1,2),w=c.clientWidth,h=c.clientHeight;
+  if(c.width!==Math.round(w*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
+  const x=c.getContext('2d'),el=musicEl(),dur=el&&isFinite(el.duration)?el.duration:0,ct=el?el.currentTime:0;
+  x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  if(dur){x.fillStyle='#ffb54733';x.fillRect(0,0,w*ct/dur,h);
+    x.font='500 9px "IBM Plex Mono",monospace';x.textBaseline='top';x.textAlign='left';
+    project.scenes.forEach((sc,i)=>{if(!hasCue(sc))return;const px=Math.round(w*+sc.cue/dur)+.5;
+      x.strokeStyle=sc.id===project.activeScene?'#ffb547':'#4fd6e8';x.lineWidth=1;x.beginPath();x.moveTo(px,0);x.lineTo(px,h);x.stroke();
+      x.fillStyle=x.strokeStyle;x.fillText(String(i+1),px+3,3)});
+    x.fillStyle='#fff';x.fillRect(Math.round(w*ct/dur)-1,0,2,h)}
+  $('tlTime').textContent=dur?fmtT(ct)+' / '+fmtT(dur):'Load a music file to place cues';
+}
+$('tl').onclick=e=>{const el=musicEl();if(!el||!isFinite(el.duration))return;const r=e.currentTarget.getBoundingClientRect();
+  el.currentTime=clamp((e.clientX-r.left)/r.width,0,1)*el.duration;lastCueIdx=-2};
+$('aFollow').onchange=e=>{project.audio.follow=e.target.checked;lastCueIdx=-2;scheduleSave()};
+
+/* =====================================================================
+   OUTPUT PANEL  (calibration, mirroring, several projectors side by side)
+   ===================================================================== */
+function renderOutPanel(){
+  const P=$('outBody');if(!P||!project)return;const c=project.cal,m=project.multi,
+    rr=(id,l,min,max,st,v)=>rangeRow(id,l,min,max,st,v);
+  P.innerHTML=`<div class="grid2">
+    <label>Mirror</label><div class="row"><button id="calFX" class="${c.flipX?'on':''}">Horizontal</button><button id="calFY" class="${c.flipY?'on':''}">Vertical</button></div>
+    ${rr('calGamma','Gamma',.4,2.5,.01,c.gamma)}${rr('calR','Red',0,1.5,.01,c.r)}${rr('calG','Green',0,1.5,.01,c.g)}${rr('calB','Blue',0,1.5,.01,c.b)}
+  </div>
+  <div class="row"><button id="calReset">Reset calibration</button></div>
+  <div class="note">Mirror for rear projection or a ceiling-mounted projector. Gamma and color balance apply to the whole output, to match projectors or make up for a tinted wall.</div>
+  <div class="grid2">
+    <label for="mpN">Projectors</label><select id="mpN">${[1,2,3,4].map(n=>`<option value="${n}"${m.n===n?' selected':''}>${n===1?'1':n+' side by side'}</option>`).join('')}</select>
+    ${m.n>1?`<label for="mpRes">Each</label><select id="mpRes">${PRESETS.map(([w,h])=>`<option value="${w}x${h}"${w===m.pw&&h===m.ph?' selected':''}>${w}×${h}</option>`).join('')}${PRESETS.some(([w,h])=>w===m.pw&&h===m.ph)?'':`<option selected value="${m.pw}x${m.ph}">${m.pw}×${m.ph}</option>`}</select>
+    <label for="mpOv">Overlap px</label><input type="number" id="mpOv" min="0" max="${Math.floor(m.pw/2)}" step="1" value="${m.ov}">
+    ${rr('mpCurve','Blend curve',1,4,.05,m.curve)}${rr('mpGamma','Blend gamma',1,3,.05,m.gamma)}`:''}
+  </div>
+  ${m.n>1?`<div class="note">The output becomes one wide canvas of ${project.output.w}×${project.output.h}. Each projector gets its own window. Where neighbours overlap, both fade out softly. If you see a bright band in the overlap, raise Blend gamma; if you see a dark band, lower it.</div>`:''}`;
+}
+$('outBody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const c=project.cal;
+  if(b.id==='calFX')c.flipX=!c.flipX;else if(b.id==='calFY')c.flipY=!c.flipY;
+  else if(b.id==='calReset')project.cal=Object.assign({},CAL0);else return;renderOutPanel();scheduleSave()});
+$('outBody').addEventListener('input',e=>{const t=e.target,c=project.cal,m=project.multi,
+    out=t.type==='range'&&t.parentElement.querySelector('output');if(out)out.textContent=fmt(t.value);
+  const map={calGamma:[c,'gamma'],calR:[c,'r'],calG:[c,'g'],calB:[c,'b'],mpCurve:[m,'curve'],mpGamma:[m,'gamma']}[t.id];
+  if(map){map[0][map[1]]=+t.value;scheduleSave()}});
+$('outBody').addEventListener('change',e=>{const t=e.target,m=project.multi;
+  if(t.id==='mpN'){const was=m.n;m.n=+t.value;if(was===1&&m.n>1){m.pw=project.output.w;m.ph=project.output.h}
+    if(m.n===1)project.output={w:m.pw,h:m.ph};closeOutput()}
+  else if(t.id==='mpRes'){[m.pw,m.ph]=t.value.split('x').map(Number);m.ov=Math.min(m.ov,Math.floor(m.pw/2))}
+  else if(t.id==='mpOv')m.ov=clamp(Math.round(+t.value||0),0,Math.floor(m.pw/2));else return;
+  applyMulti();computeView();renderTop();renderOutPanel();coords();scheduleSave();commit()});
+
+/* =====================================================================
+   PLAYER MODE  (#play or #play=<project id>: straight into the show)
+   ===================================================================== */
+let player=false,schedState=null;
+const playerLink=()=>location.href.split('#')[0]+'#play='+project.id;
+function startPlayer(){
+  player=true;setSingle(true,true);const P=project.player;
+  if(P.autoplay&&project.scenes.length>1){goScene(0,true);playing=true;sceneStart=now();renderScenes()}
+  if(P.audio!=='off')audioSet(P.audio).then(()=>{if(AUD.el&&AUD.el.paused)$('playGate').classList.remove('fade')});
+  const g=$('playGate');g.hidden=false;g.classList.remove('fade');setTimeout(()=>g.classList.add('fade'),6000);
+}
+function stopPlayer(){player=false;schedState=null;$('playGate').hidden=true;if(/^#play/.test(location.hash))history.replaceState(null,'',location.pathname+location.search)}
+$('playGate').onclick=()=>{document.documentElement.requestFullscreen?.().catch(()=>{});const P=project.player;
+  if(P.audio!=='off'){if(!AUD.active)audioSet(P.audio);else if(AUD.el&&AUD.el.paused)AUD.el.play().catch(()=>{})}$('playGate').classList.add('fade')};
+// daily on/off times: black out (and pause the music) outside the show hours
+function schedTick(){
+  const P=project.player;if(!P.on||!P.off)return;
+  const d=new Date(),m=d.getHours()*60+d.getMinutes(),toM=x=>{const[a,b]=x.split(':').map(Number);return a*60+(b||0)},on=toM(P.on),off=toM(P.off);
+  const inside=on<=off?m>=on&&m<off:m>=on||m<off;if(inside===schedState)return;
+  schedState=inside;blackout=!inside;renderTop();if(AUD.el){if(inside)AUD.el.play().catch(()=>{});else AUD.el.pause()}
+}
+function renderPlayerSettings(){const P=project.player;$('plAuto').checked=!!P.autoplay;$('plAudio').value=P.audio;$('plOn').value=P.on||'';$('plOff').value=P.off||'';$('plLink').value=playerLink()}
+['plAuto','plAudio','plOn','plOff'].forEach(id=>$(id).addEventListener('change',e=>{const P=project.player,t=e.target;
+  if(id==='plAuto')P.autoplay=t.checked;else if(id==='plAudio')P.audio=t.value;else if(id==='plOn')P.on=t.value;else P.off=t.value;scheduleSave()}));
+$('plCopy').onclick=async()=>{try{await navigator.clipboard.writeText(playerLink());toast('Player link copied')}catch(e){$('plLink').select();toast('Link selected. Press Ctrl/Cmd+C to copy.')}};
+$('plOpen').onclick=async()=>{await saveNow();location.hash='play='+project.id;location.reload()};
+
+/* =====================================================================
    MAIN LOOP + BOOT
    ===================================================================== */
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),3400)}
@@ -1855,7 +2179,7 @@ let lastT=0;
 // because a hidden editor window stops getting animation frames while the projector window keeps drawing
 function tick(){
   const t=now(),dt=Math.min(.1,Math.max(0,t-(lastT||t)));lastT=t;
-  syncOutputSize();audioUpdate(dt,t);audioSpeed(dt);tempoUpdate(t);tickShow(t);
+  syncOutputSize();audioUpdate(dt,t);audioSpeed(dt);tempoUpdate(t);tickShow(t);videoSync();cueFollow();if(player)schedTick();
   return t;
 }
 function frame(){
@@ -1863,9 +2187,9 @@ function frame(){
     const t=tick();editR.fit(window);
     $('tapDot').style.opacity=project.tempo.on?.15+.85*TEMPO.pulse:.15;
     const single=document.body.classList.contains('output'),dpr=glc.width/CW;
-    editR.draw(drawList(t),t,{testGrid,blackout,master:project.master,editor:!single,xray:xray&&!single,
+    editR.draw(single?outList(t):drawList(t),t,{testGrid,blackout,master:project.master,editor:!single,xray:xray&&!single,masks:single?outMasks():project.masks,
       bg:!single&&!bgHidden?project.bg:null,view:{x:VR.x*dpr,y:VR.y*dpr,w:VR.w*dpr,h:VR.h*dpr}});
-    drawOverlay();drawMeter();
+    drawOverlay();drawMeter();drawTimeline();
   }
   requestAnimationFrame(frame);
 }
@@ -1878,9 +2202,10 @@ async function boot(){
     try{const v1=ls.get('lumen-pin-v1');if(v1){const m=migrateV1(JSON.parse(v1),'My first layout');if(m.surfaces.length)first=m}}catch(e){}
     await store.put('projects',first);list=[first];
   }
-  const last=ls.get('lumen-pin-last');
+  const last=ls.get('lumen-pin-last'),pm=/^#play(?:=(.+))?$/.exec(location.hash);
   layout();
-  await openProject(list.find(p=>p.id===last)||list[0]);
+  await openProject(pm&&pm[1]&&list.find(p=>p.id===decodeURIComponent(pm[1]))||list.find(p=>p.id===last)||list[0]);
+  if(pm)startPlayer();
   setSaveState(storageOK?'Saved':'Session only (storage off)',storageOK?'':'off');
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
   keepAwake();document.addEventListener('visibilitychange',keepAwake);  // the browser drops the lock whenever the page is hidden
