@@ -74,6 +74,12 @@ section{display:flex;flex-direction:column;gap:8px}
 .item .nm{flex:1 1 auto;min-width:48px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
 .item .md{font:400 10px var(--f-mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:55%}
 .item .vis{font:400 10px var(--f-mono);color:var(--dim);background:none;border:0;padding:2px 4px}
+.item .ly{font:400 10px var(--f-mono);color:var(--dim);width:14px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.item.drop-before{box-shadow:0 -2px 0 var(--lamp)}
+.item.drop-after{box-shadow:0 2px 0 var(--lamp)}
+.list.dragging,.list.dragging .item{cursor:grabbing}
+.cap{font:500 9px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:0 2px}
+#faceSeg button{padding:8px 4px}
 .empty{color:var(--dim);font-size:12px;border:1px dashed var(--line);border-radius:6px;padding:12px;text-align:center}
 
 .grid2{display:grid;grid-template-columns:84px minmax(0,1fr);gap:8px 10px;align-items:center}
@@ -114,7 +120,9 @@ details.picker>summary::-webkit-details-marker{display:none}
 #ov.pan{cursor:grab}
 #stageInfo{position:absolute;left:12px;top:8px;font:400 10px var(--f-mono);color:var(--dim);font-variant-numeric:tabular-nums;pointer-events:none}
 body.output{display:block}
-body.output #top,body.output #left,body.output #right,body.output #stageInfo{display:none}
+#tiltBtn{position:absolute;right:12px;top:8px;z-index:2;padding:6px 9px;font:500 10px/1 var(--f-mono);letter-spacing:.08em;background:rgba(14,17,20,.85)}
+#ov.orbit{cursor:move}
+body.output #top,body.output #left,body.output #right,body.output #stageInfo,body.output #tiltBtn{display:none}
 body.output #stageWrap{position:fixed;inset:0;background:#000}
 body.output #ov{pointer-events:none;cursor:none}
 
@@ -231,6 +239,23 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="note">Tap along to set the tempo. Use Tempo pulse in a surface's Audio reaction, or uTempo, uTempoPulse and uBar in custom shaders.</div>
     </div>
   </details>
+  <details class="fold" id="lightFold">
+    <summary><span class="lbl">Depth &amp; light</span></summary>
+    <div class="fold-body">
+      <div class="seg" id="lOn"><button data-lon="0">Light off</button><button data-lon="1">Light on</button></div>
+      <div class="grid2">
+        <label for="lAz">Direction</label><div class="rng"><input type="range" id="lAz" min="-180" max="180" step="1"><output></output></div>
+        <label for="lEl">Height</label><div class="rng"><input type="range" id="lEl" min="5" max="90" step="1"><output></output></div>
+        <label for="lAmt">Strength</label><div class="rng"><input type="range" id="lAmt" min="0" max="1" step="0.01"><output></output></div>
+        <label for="lAmb">Ambient</label><div class="rng"><input type="range" id="lAmb" min="0" max="1" step="0.01"><output></output></div>
+        <label>Motion</label><div class="seg" id="lAnim"><button data-la="off">Still</button><button data-la="orbit">Orbit</button><button data-la="sweep">Sweep</button></div>
+        <label for="lSpeed">Speed</label><div class="rng"><input type="range" id="lSpeed" min="0" max="1" step="0.01"><output></output></div>
+        <label for="lShadow">Shadows</label><div class="rng"><input type="range" id="lShadow" min="0" max="1" step="0.01"><output></output></div>
+        <label for="lShLen">Shadow length</label><div class="rng"><input type="range" id="lShLen" min="0" max="0.15" step="0.005"><output></output></div>
+      </div>
+      <div class="note">Set which way each surface faces under Depth in its properties. The light then shades the faces like a real object, and surfaces set to Cast shadow darken whatever sits behind them. Depth effects use this light too.</div>
+    </div>
+  </details>
   <details class="fold" id="outFold">
     <summary><span class="lbl">Output &amp; projectors</span></summary>
     <div class="fold-body" id="outBody"></div>
@@ -242,7 +267,8 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
   <details class="fold">
     <summary><span class="lbl">Editor view</span></summary>
     <div class="fold-body">
-      <div class="row"><button id="xrayBtn" title="See through layers (X)">X-ray</button><button id="fitBtn" title="Fit the output in view (0)">Fit view</button><span id="zoomInfo"></span></div>
+      <div class="row"><button id="xrayBtn" title="See through layers (X)">X-ray</button><button id="tiltBtn2" title="Tilt the stage to see the layers in depth (D)">3D view</button><button id="fitBtn" title="Fit the output in view (0)">Fit view</button><span id="zoomInfo"></span></div>
+      <div class="grid2"><label>3D spread</label><div class="seg" id="tiltBy"><button data-tb="layer" title="Space the layers by their stacking order">Layer order</button><button data-tb="distance" title="Place each surface at the Distance set under Depth">Distance</button></div></div>
       <div class="grid2">
         <label for="bgPick">Photo</label><div class="row"><button id="bgPick">Choose photo…</button><input type="file" id="bgFile" accept="image/*" hidden></div>
         <label for="bgOpac">Photo fade</label><div class="rng"><input type="range" id="bgOpac" min="0" max="1" step="0.01"><output></output></div>
@@ -262,6 +288,8 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div>Scroll to zoom · <kbd>Space</kbd>+drag to pan · <kbd>0</kbd> fit</div>
       <div><kbd>Del</kbd> / <kbd>Alt</kbd>+click remove a mask or edge point</div>
       <div>Points snap to other shapes and stay joined. Drag with <kbd>Shift</kbd> to pull one free, <kbd>Ctrl</kbd> to skip snapping</div>
+      <div><kbd>[</kbd> / <kbd>]</kbd> send back / bring forward · <kbd>Shift</kbd> all the way</div>
+      <div><kbd>D</kbd> 3D view · drag to orbit, scroll to spread</div>
       <div><kbd>X</kbd> X-ray · <kbd>G</kbd> test grid · <kbd>B</kbd> blackout</div>
       <div><kbd>A</kbd> align on output · <kbd>T</kbd> tap tempo</div>
       <div><kbd>O</kbd> output window · <kbd>H</kbd> this screen</div>
@@ -273,6 +301,7 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
 <main id="stageWrap">
   <canvas id="gl"></canvas><canvas id="ov"></canvas>
   <div id="stageInfo"></div>
+  <button id="tiltBtn" title="Tilt the stage to see the layers in depth (D)">3D VIEW</button>
   <div id="sceneBar">
     <div id="sceneChips"></div>
     <button id="sceneAdd" title="Save the current look as a new scene">+ Scene</button>
@@ -352,6 +381,7 @@ const DEFAULT_CODE=`// Write  vec3 shade(vec2 uv, vec2 p, float t)
 // You can use u_c1, u_c2 (colors), u_a, u_b, u_c (sliders 0..1)
 // and the audio values uLevel, uBass, uMid, uTreble, uBeat (0..1).
 // Tempo panel: uTempo (0..1 ramp each beat), uTempoPulse, uBar (beat 0..3).
+// Depth: uNormal (which way the face points), uDepth (0 near..1 far), uLight (light direction).
 // Or paste a single-pass Shadertoy shader that has mainImage().
 vec3 shade(vec2 uv, vec2 p, float t){
   float r = length(p);
@@ -456,6 +486,55 @@ const SHADERS=[
    float bl=step(.93,hash(floor(p*6.)))*(1.-smoothstep(0.,.12,length(fract(p*6.)-.5)))*tr;
    float inside=step(r,R); return u_c1*(tr*.85+rg*.35+cl*.25+bl*1.5+.04)*inside;}`},
 
+ /* Depth effects: flat paint that reads as 3D. They shade with uLight, the light in the Depth & light panel,
+    so they agree with the lit faces around them. Light vectors are x right, y down, z towards the viewer. */
+ {id:'bevel',name:'Bevel panel',cat:'Depth',params:[C('c1','Panel','#c9a46a'),C('c2','Line','#ffe2a8'),R('width','Bevel width',.02,.3,.005,.09),R('height','Bevel slope',0,1,.01,.7),R('frames','Frames',1,4,1,1)],
+  code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 h=vec2(uAspect*.5,.5),d=h-abs(p); float e=min(d.x,d.y);
+   float w=u_width*(1.+.25*uBass); float fr=floor(min(e/w,u_frames)); float le=e-fr*w;
+   vec3 n=vec3(0.,0.,1.);
+   if(fr<u_frames){vec2 g=d.x<d.y?vec2(sign(p.x),0.):vec2(0.,sign(p.y)); n=normalize(vec3(g*u_height,1.));}
+   float l=max(dot(n,uLight),0.);
+   float ln=fr<u_frames?1.-smoothstep(0.,.004,abs(le-w)):0.;
+   return u_c1*(.18+.95*l)+u_c2*ln*(.25+.5*uBeat);}`},
+ {id:'inset',name:'Inset box',cat:'Depth',params:[C('c1','Walls','#7a8ba0'),C('c2','Grid','#4fd6e8'),R('depth','Depth',0,1,.01,.6),R('lines','Grid lines',0,12,1,6),R('pulse','Breathe',0,1,.01,.25)],
+  code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 h=vec2(uAspect*.5,.5),q=abs(p);
+   float dp=clamp(u_depth*(1.+u_pulse*.35*sin(t))+uBass*.25,0.,1.5); float s=1./(1.+dp*3.); vec2 hb=h*s;
+   vec2 f=(q-hb)/max(h-hb,1e-4); float sc; vec3 n; float gl;
+   if(f.x<=0.&&f.y<=0.){n=vec3(0.,0.,1.); sc=s; vec2 g=fract(p/hb*u_lines*.5+.5); gl=u_lines>0.?1.-smoothstep(0.,.03,min(min(g.x,1.-g.x),min(g.y,1.-g.y))):0.;}
+   else{bool sx=f.x>f.y; float ff=sx?f.x:f.y; n=sx?vec3(-sign(p.x),0.,.35):vec3(0.,-sign(p.y),.35); n=normalize(n);
+     sc=s+ff*(1.-s); float zn=(1./sc-1.)/max(1./s-1.,1e-4);
+     float g1=fract(zn*u_lines); float g2=fract((sx?p.y/(h.y*sc):p.x/(h.x*sc))*u_lines*.5+.5);
+     gl=u_lines>0.?1.-smoothstep(0.,.04,min(min(g1,1.-g1),min(g2,1.-g2))):0.;}
+   float zn2=(1./sc-1.)/max(1./s-1.,1e-4); float ao=mix(1.,.35,clamp(zn2,0.,1.)*clamp(dp,0.,1.));
+   float l=.2+.8*max(dot(n,uLight),0.);
+   return (u_c1*l+u_c2*gl*.8)*ao;}`},
+ {id:'tiles',name:'Popping tiles',cat:'Depth',params:[C('c1','Tiles','#e6e1d6'),C('c2','Floor','#2a2f38'),R('cells','Tiles',2,24,1,8),R('height','Pop height',0,1,.01,.7),R('beat','Beat kick',0,1,.01,.5)],
+  code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 g=p*u_cells,id=floor(g),f=fract(g)-.5; float r=hash(id);
+   float hg=u_height*(.5+.5*sin(t*1.3+r*6.2831853))+u_beat*uBeat*r;
+   float b=.33; vec2 o=vec2(-.11,-.11)*hg; vec2 so=-uLight.xy/max(uLight.z,.35)*.11*hg;
+   vec3 col=u_c2*(.35+.4*uLight.z);
+   vec2 a=abs(f-so); if(max(a.x,a.y)<b) col*=.45;
+   for(int k=1;k<8;k++){vec2 qq=f-o*float(k)/8.; vec2 aq=abs(qq);
+     if(max(aq.x,aq.y)<b){vec2 qt=f-o; vec2 nn=abs(qt.x)>abs(qt.y)?vec2(sign(qt.x),0.):vec2(0.,sign(qt.y));
+       col=u_c1*(.15+.7*max(dot(normalize(vec3(nn,.25)),uLight),0.));}}
+   vec2 at=abs(f-o); if(max(at.x,at.y)<b) col=mix(u_c1,hsv(r,.25,1.)*u_c1,.3)*(.25+.85*uLight.z);
+   return col;}`},
+ {id:'parallax',name:'Parallax window',cat:'Depth',params:[C('c1','Near','#ffd28a'),C('c2','Far','#3d5bff'),R('density','Density',2,20,1,7),R('sway','Sway',0,1,.01,.4)],
+  code:`vec3 shade(vec2 uv,vec2 p,float t){vec2 eye=vec2(sin(t*.31),cos(t*.23)*.6)*u_sway*.25;
+   vec3 col=u_c2*.06;
+   for(int i=0;i<5;i++){float z=1.-float(i)/5.; float sc=u_density*(.6+z*1.6);
+     vec2 q=(p+eye*(1.-z)*2.)*sc+float(i)*7.31; vec2 id=floor(q),f=fract(q)-.5;
+     vec2 c=hash2(id+float(i))-.5; float rr=.08+.18*hash(id*1.7+float(i));
+     float m=1.-smoothstep(rr*.7,rr,length(f-c*.5));
+     vec3 lc=mix(u_c1,u_c2,z)*(1.-z*.75)*(1.+uBass*.6*(1.-z));
+     col=mix(col,lc,m*step(.35,hash(id+3.1)));}
+   return col;}`},
+ {id:'dscan',name:'Depth scan',cat:'Depth',params:[C('c1','Scan','#4fd6e8'),C('c2','Base','#06121a'),S('axis','Sweep',['Near to far','Far to near','Left to right','Top to bottom'],0),R('width','Width',.02,.5,.01,.12),R('spread','Spread on face',0,1,.01,.25)],
+  code:`vec3 shade(vec2 uv,vec2 p,float t){float x=u_axis<.5?uDepth:u_axis<1.5?1.-uDepth:u_axis<2.5?vOut.x:vOut.y;
+   x+=(uv.y-.5)*u_spread*.3; float pos=fract(t*.18)*1.6-.3;
+   float b=exp(-pow((x-pos)/u_width,2.)); float tr=exp(-max(pos-x,0.)/(u_width*3.))*step(x,pos);
+   return u_c2+u_c1*(b*1.2+tr*.25)*(1.+uBeat*.6);}`},
+
  {id:'media',name:'Image / video / live',cat:'Media',params:[S('fit','Fit',['Stretch','Cover','Contain'],0),C('c1','Bar color','#000000'),
    S('vend','Video end',['Loop','Play once, hold last frame'],0),S('vstart','On scene change',['Keep playing','Restart from the start'],0),
    R('vrate','Video speed',.1,4,.05,1),S('vsound','Video sound',['Muted','On'],0)],
@@ -474,18 +553,19 @@ const SHADERS=[
   code:''}
 ];
 const SH=Object.fromEntries(SHADERS.map(s=>[s.id,s]));
-const CATS=['Utility','Pattern','Organic','Motion','Media','Text','Custom'];
+const CATS=['Utility','Pattern','Organic','Motion','Depth','Media','Text','Custom'];
 
 /* Every surface is drawn as a fine triangle grid (GRID×GRID cells) in output space.
    aPos = output position 0..1 (y down), aUV = surface coordinate 0..1. */
-const VERT=`attribute vec2 aPos;attribute vec2 aUV;uniform vec4 uView;varying vec2 vUV;varying vec2 vOut;
-void main(){vUV=aUV;vOut=aPos;gl_Position=vec4(aPos*uView.xy+uView.zw,0.,1.);}`;
+const VERT=`attribute vec2 aPos;attribute vec2 aUV;uniform vec4 uView;uniform mat4 uM;uniform float uZ;varying vec2 vUV;varying vec2 vOut;
+void main(){vUV=aUV;vOut=aPos;gl_Position=uM*vec4(aPos*uView.xy+uView.zw,uZ,1.);}`;  // uM / uZ: the editor's 3D view (identity and 0 everywhere else)
 const HEAD=`precision highp float;
 varying vec2 vUV; varying vec2 vOut;
 uniform float uTime,uAspect,uGeoAspect,uTexAspect,uBright,uOpac,uFeather,uRot,uHasMask,uXray; uniform vec2 uFlip; uniform vec4 uRad;
 uniform sampler2D uTex; uniform sampler2D uMask; uniform float uLevel,uBass,uMid,uTreble,uBeat;
 uniform float uTempo,uTempoPulse,uBar,uSpace;
 uniform vec3 uClip,uTint,uOGain; uniform vec4 uGrade; uniform float uOGamma;
+uniform vec3 uNormal,uLight; uniform float uDepth,uEdgeShade; uniform vec2 uShade;
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 vec2 hash2(vec2 p){float n=hash(p);return vec2(n,hash(p+n+.17));}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
@@ -508,6 +588,8 @@ void main(){
  if(uRot>.5&&uRot<1.5)c=vec2(c.y,1.-c.x); else if(uRot>1.5&&uRot<2.5)c=1.-c; else if(uRot>2.5)c=vec2(1.-c.y,c.x);
  vec2 p=(c-.5)*vec2(uAspect,1.);
  vec3 col=shade(c,p,uTime);
+ if(uShade.x>0.) col*=mix(1.,uShade.y+(1.-uShade.y)*max(dot(uNormal,uLight),0.),uShade.x);  // virtual light on this face
+ if(uEdgeShade>0.) col*=1.-uEdgeShade*(1.-smoothstep(0.,.12,-d));                         // darker into the corners
  float a=uOpac*inside; if(uFeather>0.)a*=smoothstep(0.,uFeather,-d);
  float mk=uHasMask>.5?texture2D(uMask,vOut).a:1.;
  a*=mix(mk,1.,uXray*.3); a*=1.-uXray*.4;
@@ -536,7 +618,7 @@ function customSrc(code){const toy=/\bmainImage\s*\(/.test(code),pre=HEAD+declFo
   return {src:pre+code+(toy?TOY_POST:'')+MAIN,off:pre.split('\n').length-1}}
 const hashStr=t=>{let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36)+'_'+t.length};
 const customErr=new Map();
-const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace','uClip','uGrade','uTint','uOGain','uOGamma'];
+const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace','uClip','uGrade','uTint','uOGain','uOGamma','uM','uZ','uNormal','uLight','uDepth','uEdgeShade','uShade'];
 const GRADE0={gamma:1,contrast:1,sat:1,hue:0,warm:0},CAL0={gamma:1,r:1,g:1,b:1,flipX:false,flipY:false};
 const warmTint=w=>w>=0?[1,1-.12*w,1-.4*w]:[1+.4*w,1+.12*w,1];
 const hex=h=>{h=String(h||'#000000');return [1,3,5].map(i=>(parseInt(h.substr(i,2),16)||0)/255)};
@@ -674,13 +756,14 @@ const audioPhase=new Map();   // surfaceId -> extra phase added by sound-driven 
 
 function surfaceDefaults(name,pts,shader='grid'){
   return {id:uid('s'),name,pts,shader,params:{},mediaId:null,speed:1,bright:1,opac:1,feather:0,rot:0,flipX:false,flipY:false,visible:true,
-    warp:'quad',mesh:null,round:[0,0,0,0],roundLinked:true,reactions:[],space:'surface'};
+    warp:'quad',mesh:null,round:[0,0,0,0],roundLinked:true,reactions:[],space:'surface',yaw:0,pitch:0,z:0,edgeShade:0,castShadow:false};
 }
 function maskDefaults(name,pts,mode='hide',target='all'){return {id:uid('k'),name,pts,mode,target,feather:0,round:0,visible:true}}
 function normSurface(s){
   s.params=s.params||{};s.warp=s.warp||'quad';if(s.warp==='mesh'&&!s.mesh)s.warp='quad';
   s.round=Array.isArray(s.round)&&s.round.length===4?s.round:[0,0,0,0];if(s.roundLinked===undefined)s.roundLinked=true;if(!Array.isArray(s.reactions))s.reactions=[];
   if(s.space!=='output')s.space='surface';
+  s.yaw=clamp(+s.yaw||0,-89,89);s.pitch=clamp(+s.pitch||0,-89,89);s.z=clamp(+s.z||0,0,1);s.edgeShade=clamp(+s.edgeShade||0,0,1);s.castShadow=!!s.castShadow;
   s.grade=Object.assign({},GRADE0,s.grade||{});
   if(!Array.isArray(s.edges)||s.edges.length!==4)s.edges=noEdges();if(s.edgeSmooth===undefined)s.edgeSmooth=true;
   paramsOf(s);return s;
@@ -691,7 +774,20 @@ function normProject(p){
   p.tempo=Object.assign({on:false,bpm:120,quant:'off'},p.tempo||{});p.midi=Object.assign({maps:[]},p.midi||{});
   p.cal=Object.assign({},CAL0,p.cal||{});
   p.multi=Object.assign({n:1,pw:p.output.w,ph:p.output.h,ov:0,curve:2,gamma:2.2},p.multi||{});
-  p.player=Object.assign({autoplay:true,audio:'off',on:'',off:''},p.player||{});return p;
+  p.player=Object.assign({autoplay:true,audio:'off',on:'',off:''},p.player||{});
+  p.light=Object.assign({},LIGHT0,p.light||{});return p;
+}
+/* Depth model. Each surface says which way it faces (yaw: turned left / right, pitch: tilted up / down, in degrees)
+   and how far it is (z: 0 near … 1 far). Directions use x right, y down, z towards the viewer. */
+const LIGHT0={on:false,az:-40,el:45,amount:.6,ambient:.35,anim:'off',speed:.2,shadow:.5,shadowLen:.04};
+const FACES=[{k:'front',l:'Front',yaw:0,pitch:0},{k:'left',l:'Left',yaw:-50,pitch:0},{k:'right',l:'Right',yaw:50,pitch:0},{k:'top',l:'Top',yaw:0,pitch:60},{k:'bottom',l:'Under',yaw:0,pitch:-60}];
+const faceOf=s=>(FACES.find(f=>f.yaw===(+s.yaw||0)&&f.pitch===(+s.pitch||0))||{}).k;
+function normalOf(s){const a=(+s.yaw||0)*Math.PI/180,b=(+s.pitch||0)*Math.PI/180;return [Math.sin(a)*Math.cos(b),-Math.sin(b),Math.cos(a)*Math.cos(b)]}
+// direction the light comes from (az: 0 above, -90 left, 90 right; el: 90 straight from the projector), optionally moving
+function lightDir(L,t){
+  let az=+L.az||0;const sp=+L.speed||0;
+  if(L.anim==='orbit')az+=t*sp*120;else if(L.anim==='sweep')az+=Math.sin(t*sp*2.5)*75;
+  const a=az*Math.PI/180,e=clamp(+L.el||45,1,90)*Math.PI/180;return [Math.sin(a)*Math.cos(e),-Math.cos(a)*Math.cos(e),Math.sin(e)];
 }
 function paramsOf(s,id=s.shader){
   const def=SH[id];if(!def) return {};
@@ -707,6 +803,7 @@ function sampleProject(){
   const a=surfaceDefaults('Left face',[[.22,.30],[.47,.36],[.47,.78],[.22,.70]],'grid');
   const b=surfaceDefaults('Right face',[[.47,.36],[.74,.29],[.74,.71],[.47,.78]],'water');
   const c=surfaceDefaults('Top',[[.22,.30],[.49,.22],[.74,.29],[.47,.36]],'chase');
+  a.yaw=-50;b.yaw=50;c.pitch=60;  // faces of the box, so the light in Depth & light shades it straight away
   p.surfaces=[a,b,c].map(normSurface);return p;
 }
 function blankProject(name){return normProject({id:uid('p'),name,created:Date.now(),updated:Date.now(),output:{w:1920,h:1080},surfaces:[surfaceDefaults('Surface 1',[[.3,.3],[.7,.3],[.7,.7],[.3,.7]])]})}
@@ -996,7 +1093,7 @@ const MIDI={access:null,learn:-1,held:new Map(),last:''};
 const MIDI_ACTIONS=[
   {k:'scene',l:'Go to scene',arg:'scene'},{k:'next',l:'Next scene'},{k:'prev',l:'Previous scene'},{k:'play',l:'Play / stop'},
   {k:'blackout',l:'Blackout on/off'},{k:'grid',l:'Test grid on/off'},{k:'tap',l:'Tap tempo'},
-  {k:'master',l:'Master level',fader:true},{k:'gain',l:'Audio sensitivity',fader:true},
+  {k:'master',l:'Master level',fader:true},{k:'gain',l:'Audio sensitivity',fader:true},{k:'light',l:'Light strength',fader:true},
   {k:'sbright',l:'Surface brightness',arg:'surface',fader:true},{k:'svis',l:'Surface on/off',arg:'surface'}];
 const MIDI_ACT=Object.fromEntries(MIDI_ACTIONS.map(a=>[a.k,a]));
 const midiLabel=k=>k?(k[0]==='n'?'Note ':'CC ')+k.slice(k.indexOf(':')+1)+' · ch '+k.slice(1,k.indexOf(':')):'not set';
@@ -1032,6 +1129,7 @@ function midiButton(m){
 function midiFader(m,v){
   if(m.action==='master'){project.master=v;$('master').value=v}
   else if(m.action==='gain'){project.audio.gain=Math.round((.2+v*3.8)*100)/100;renderAudio()}
+  else if(m.action==='light'){project.light.amount=v;renderLight()}
   else if(m.action==='sbright'){const x=project.surfaces.find(q=>q.id===m.arg);if(!x)return;x.bright=v;
     const el=$('cBright');if(el&&selKind==='s'&&project.surfaces[sel]===x){el.value=v;el.nextElementSibling.textContent=fmt(v)}}
   scheduleSave();
@@ -1109,12 +1207,30 @@ function showKeys(e){
   return false;
 }
 
+/* 3D VIEW  (editor only). The flat picture is tilted as a whole: each surface is lifted off the wall by z
+   (a fraction of the frame height), turned by yaw / pitch around the frame centre and seen in perspective.
+   tiltCore works in pixels from the frame centre with y up; the shader and the overlay both use it. */
+const IDENT=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+const PLATE={id:'__plate',name:'',shader:'solid',params:{solid:{c1:'#000000'}},pts:[[0,0],[1,0],[1,1],[0,1]],visible:true,speed:0,bright:1,opac:1,feather:0,rot:0,warp:'quad',round:[0,0,0,0],reactions:[]};
+function tiltCore(T,Hf){
+  const a=T.yaw*T.k*Math.PI/180,b=T.pitch*T.k*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(b),sb=Math.sin(b);
+  // rows: rotated X, Y, Z from X, Y, Z (yaw about the vertical axis, then pitch about the horizontal one)
+  return {R:[[ca,0,sa],[sa*sb,cb,-ca*sb],[-sa*cb,sb,ca*cb]],D:2.6*Hf,sc:1-.12*T.k};
+}
+function tiltMatrix(T,view,cw,ch){
+  const hw=cw/2,hh=ch/2,cx=(.5*view[0]+view[2])*hw,cy=(.5*view[1]+view[3])*hh,Hf=Math.abs(view[1])*hh,{R,D,sc}=tiltCore(T,Hf);
+  // input (clip x, clip y, z, 1) → X = hw·x − cx, Y = hh·y − cy, Z = Hf·z, then rotate
+  const row=r=>[R[r][0]*hw,R[r][1]*hh,R[r][2]*Hf,-(R[r][0]*cx+R[r][1]*cy)];
+  const X=row(0),Y=row(1),Z=row(2),W=Z.map((v,j)=>(j===3?1:0)-v/D);
+  const xr=X.map((v,j)=>(sc*v+cx*W[j])/hw),yr=Y.map((v,j)=>(sc*v+cy*W[j])/hh),zr=[0,0,0,0],M=new Float32Array(16);
+  [xr,yr,zr,W].forEach((r,ri)=>r.forEach((v,c)=>M[c*4+ri]=v));return M;
+}
 class Renderer{
   constructor(canvas,opts={}){
     this.c=canvas;
     const gl=this.gl=canvas.getContext('webgl',Object.assign({premultipliedAlpha:false,antialias:true},opts));
     if(!gl) throw new Error('WebGL is not available');
-    this.progs={};this.tex=new Map();this.mtex=new Map();this.ctex=new Map();
+    this.progs={};this.tex=new Map();this.mtex=new Map();this.ctex=new Map();this.M=IDENT;
     this.vbo=gl.createBuffer();
     const N=GRID,idx=[];for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,c,b,d,c)}
     this.ibo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);this.nIdx=idx.length;
@@ -1178,24 +1294,40 @@ class Renderer{
   }
   attribs(buf){const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.vertexAttribPointer(0,2,gl.FLOAT,false,16,0);gl.vertexAttribPointer(1,2,gl.FLOAT,false,16,8)}
   draw(surfs,t,o={}){
-    const gl=this.gl,cw=this.c.width,ch=this.c.height;let V=o.view||{x:0,y:0,w:cw,h:ch};
+    const gl=this.gl,cw=this.c.width,ch=this.c.height;let V=o.view||{x:0,y:0,w:cw,h:ch};this.t=t;
     if(o.region){const [a,b]=o.region,rw=b-a;V={x:-a/rw*cw,y:0,w:cw/rw,h:ch}}  // this window shows one projector's slice
     gl.viewport(0,0,cw,ch);
-    if(o.editor){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);
+    const view=[2*V.w/cw,-2*V.h/ch,2*V.x/cw-1,1-2*V.y/ch];
+    this.M=o.tilt?tiltMatrix(o.tilt,view,cw,ch):IDENT;
+    if(o.editor&&o.tilt){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);this.one(PLATE,0,Object.assign({},o,{noMasks:true,testGrid:false}),view,0)}  // 3D view: the output frame is a black wall
+    else if(o.editor){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.SCISSOR_TEST);gl.scissor(Math.round(V.x),Math.round(ch-V.y-V.h),Math.max(0,Math.round(V.w)),Math.max(0,Math.round(V.h)));
       gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.disable(gl.SCISSOR_TEST)}
     else{gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT)}
-    const view=[2*V.w/cw,-2*V.h/ch,2*V.x/cw-1,1-2*V.y/ch];
     if(!o.editor&&!o.aspect&&project){const c=project.cal;if(c.flipX){view[0]=-view[0];view[2]=-view[2]}if(c.flipY){view[1]=-view[1];view[3]=-view[3]}}  // rear / ceiling projection
     if(o.bg&&o.bg.mediaId)this.drawBg(o.bg,view);
     if(o.blackout) return;
     this.surfs(surfs,t,o,view);
     if(o.blend)this.drawBlend(o.blend);
   }
+  // draws back to front; in the 3D view sorted by depth. A surface that casts a shadow first darkens what is already drawn behind it
   surfs(surfs,t,o,view){
-    const gl=this.gl;
-    surfs.forEach((s,i)=>{
-      if(!s.visible) return;
+    const L=this.L=o.light||(project&&project.light)||LIGHT0;
+    this.ld=lightDir(o.aspect?LIGHT0:L,o.aspect?0:t);
+    const lit=!o.testGrid&&!o.aspect&&!!L.on,items=surfs.map((s,i)=>({s,i,z:o.tilt?o.tilt.z(s):0}));
+    if(o.tilt)items.sort((a,b)=>a.z-b.z);
+    for(const {s,i,z} of items){
+      if(!s.visible)continue;
+      if(lit&&s.castShadow&&+L.shadow>0){
+        const f=(+L.shadowLen||0)*(1-clamp(+s.z||0,0,1))/Math.max(this.ld[2],.25),dx=-this.ld[0]*f*project.output.h/project.output.w,dy=-this.ld[1]*f;
+        this.one(Object.assign({},s,{shader:'solid',params:{solid:{c1:'#000000'}},reactions:[],bright:1,opac:+L.shadow,feather:Math.max(+s.feather||0,.05),grade:GRADE0,edgeShade:0,_shadow:true}),
+          i,o,[view[0],view[1],view[2]+dx*view[0],view[3]+dy*view[1]],z);
+      }
+      this.one(s,i,o,view,z,lit);
+    }
+  }
+  one(s,i,o,view,z=0,lit=false){
+    const gl=this.gl,L=this.L||LIGHT0;
       const id=o.testGrid?'grid':s.shader;
       let P=id==='custom'?this.customProg(paramsOf(s,'custom').code||''):this.prog(id),useId=id;if(!P){P=this.prog('solid');useId='solid';if(!P)return}
       const base=o.testGrid?{c1:PALETTE[i%PALETTE.length],c2:'#9aa6b2',cells:10}:paramsOf(s,useId),ef=o.testGrid?{bright:1,opac:1,prm:base}:effective(s,base,SH[useId]),prm=ef.prm,fo=s._fadeOpac??1,ms=o.master??1;
@@ -1204,8 +1336,8 @@ class Renderer{
       gl.useProgram(P.p);
       gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,g.data,gl.DYNAMIC_DRAW);this.attribs(this.vbo);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
-      gl.uniform4fv(u.uView,view);
-      gl.uniform1f(u.uTime,o.time??getPhase(s,t));
+      gl.uniform4fv(u.uView,view);gl.uniformMatrix4fv(u.uM,false,this.M);gl.uniform1f(u.uZ,z);
+      gl.uniform1f(u.uTime,o.time??getPhase(s,this.t));
       gl.uniform1f(u.uAspect,asp.content);gl.uniform1f(u.uGeoAspect,asp.geo);
       const rd=s.round||[0,0,0,0],rr=s.roundLinked!==false?[rd[0],rd[0],rd[0],rd[0]]:rd;
       gl.uniform4fv(u.uRad,rr.map(v=>clamp(+v||0,0,1)));
@@ -1213,6 +1345,8 @@ class Renderer{
       gl.uniform1f(u.uFeather,o.testGrid?0:+s.feather);gl.uniform1f(u.uRot,o.testGrid?0:+s.rot);
       gl.uniform2f(u.uFlip,!o.testGrid&&s.flipX?1:0,!o.testGrid&&s.flipY?1:0);
       gl.uniform1f(u.uXray,o.xray?1:0);
+      gl.uniform3fv(u.uNormal,o.testGrid?[0,0,1]:normalOf(s));gl.uniform1f(u.uDepth,clamp(+s.z||0,0,1));gl.uniform3fv(u.uLight,this.ld||[0,0,1]);
+      gl.uniform2f(u.uShade,lit?clamp(+L.amount||0,0,1):0,clamp(+L.ambient||0,0,1));gl.uniform1f(u.uEdgeShade,o.testGrid||o.aspect||s._shadow?0:clamp(+s.edgeShade||0,0,1));
       const av=AUD.v;gl.uniform1f(u.uLevel,av.level);gl.uniform1f(u.uBass,av.bass);gl.uniform1f(u.uMid,av.mid);gl.uniform1f(u.uTreble,av.treble);gl.uniform1f(u.uBeat,av.beat);
       gl.uniform1f(u.uTempo,TEMPO.beat);gl.uniform1f(u.uTempoPulse,TEMPO.pulse);gl.uniform1f(u.uBar,TEMPO.bar);gl.uniform1f(u.uSpace,span?1:0);
       const cl=s._clip,gr=o.aspect||o.testGrid?GRADE0:s.grade||GRADE0,cal=o.aspect?CAL0:project.cal;
@@ -1231,22 +1365,21 @@ class Renderer{
       for(const d of SH[useId].params){if(NOUNI.has(d.t))continue;const loc=u['u_'+d.k],v=prm[d.k]??d.d;
         if(d.t==='color')gl.uniform3fv(loc,hex(v));else gl.uniform1f(loc,+v)}
       gl.drawElements(gl.TRIANGLES,this.nIdx,gl.UNSIGNED_SHORT,0);
-    });
   }
   // soft edge where neighbouring projectors overlap: darkens this window's overlap so the two add up evenly
   drawBlend(b){
-    const gl=this.gl;if(!this.blP)this.blP=this.link(BLEND_FS,['uView','uL','uP','uG']);if(!this.blP)return;
+    const gl=this.gl;if(!this.blP)this.blP=this.link(BLEND_FS,['uView','uL','uP','uG','uM','uZ']);if(!this.blP)return;
     const c=project.cal,v=[c.flipX?-2:2,c.flipY?2:-2,c.flipX?1:-1,c.flipY?-1:1];
     gl.useProgram(this.blP.p);this.attribs(this.qbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.qibo);
-    gl.uniform4fv(this.blP.u.uView,v);gl.uniform2f(this.blP.u.uL,b.l,b.r);gl.uniform1f(this.blP.u.uP,b.p);gl.uniform1f(this.blP.u.uG,b.g);
+    gl.uniform4fv(this.blP.u.uView,v);gl.uniformMatrix4fv(this.blP.u.uM,false,IDENT);gl.uniform1f(this.blP.u.uZ,0);gl.uniform2f(this.blP.u.uL,b.l,b.r);gl.uniform1f(this.blP.u.uP,b.p);gl.uniform1f(this.blP.u.uG,b.g);
     gl.blendFunc(gl.ZERO,gl.SRC_COLOR);gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
     gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   }
   drawBg(bg,view){
-    const gl=this.gl;if(!this.bgP)this.bgP=this.link(BG_FS,['uView','uTex','uOp']);if(!this.bgP)return;
+    const gl=this.gl;if(!this.bgP)this.bgP=this.link(BG_FS,['uView','uTex','uOp','uM','uZ']);if(!this.bgP)return;
     gl.activeTexture(gl.TEXTURE0);const tx=this.texFor(bg.mediaId);if(!tx)return;
     gl.useProgram(this.bgP.p);this.attribs(this.qbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.qibo);
-    gl.uniform4fv(this.bgP.u.uView,view);gl.uniform1i(this.bgP.u.uTex,0);gl.uniform1f(this.bgP.u.uOp,1-(+bg.opacity||0));
+    gl.uniform4fv(this.bgP.u.uView,view);gl.uniformMatrix4fv(this.bgP.u.uM,false,this.M);gl.uniform1f(this.bgP.u.uZ,0);gl.uniform1i(this.bgP.u.uTex,0);gl.uniform1f(this.bgP.u.uOp,1-(+bg.opacity||0));
     gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
   }
 }
@@ -1259,12 +1392,30 @@ let editR;
 try{editR=new Renderer(glc)}catch(e){document.body.innerHTML='<p style="padding:24px">This browser has WebGL turned off, which the mapper needs. Try Chrome or Edge.</p>';return}
 let CW=1,CH=1,VR={x:0,y:0,w:1,h:1};
 const view={zoom:1,panX:0,panY:0};
+// 3D view: k eases 0 (flat) → 1 (tilted); by 'layer' spaces surfaces by stacking order, 'distance' by their Depth distance
+const tilt={on:false,k:0,yaw:-28,pitch:22,sep:.35,by:'layer',hits:[]};
+const reduceMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+function tiltZ(s){
+  const S=project.surfaces;let i=S.findIndex(x=>x.id===s.id);if(i<0)i=0;
+  return tilt.k*tilt.sep*(tilt.by==='distance'?1-clamp(+s.z||0,0,1):(i+1)/Math.max(1,S.length));
+}
+// output point (0..1) lifted by z → screen px, the same transform the shader applies in the 3D view
+function proj3(p,z){
+  const cx=VR.x+VR.w/2,cy=VR.y+VR.h/2,{R,D,sc}=tiltCore(tilt,VR.h);
+  const X=VR.x+p[0]*VR.w-cx,Y=cy-(VR.y+p[1]*VR.h),Z=z*VR.h;
+  const r=k=>R[k][0]*X+R[k][1]*Y+R[k][2]*Z,w=1-r(2)/D;
+  return [cx+sc*r(0)/w,cy-sc*r(1)/w];
+}
+function setTilt(on){
+  tilt.on=on;if(on){selPt=-1;if(!tilt.seen){tilt.seen=true;toast('3D view: drag to orbit, scroll to spread the layers, click one to select it. D or Esc returns.')}}
+  renderViewPanel();coords();
+}
 function computeView(){
   if(document.body.classList.contains('output')){VR={x:0,y:0,w:CW,h:CH};return}
   const pad=24,ar=project?project.output.w/project.output.h:16/9;let fw=Math.max(10,CW-pad*2),fh=Math.max(10,CH-pad*2);
   if(fw/fh>ar)fw=fh*ar;else fh=fw/ar;
   const w=fw*view.zoom,h=fh*view.zoom;VR={x:(CW-w)/2+view.panX,y:(CH-h)/2+view.panY,w,h};
-  if(project)$('stageInfo').textContent=`Output ${project.output.w}×${project.output.h}${multiN()>1?' across '+multiN()+' projectors':''} · zoom ${Math.round(view.zoom*100)}%${blind?' · BLIND: the output holds until Go':''}`;
+  if(project)$('stageInfo').textContent=`Output ${project.output.w}×${project.output.h}${multiN()>1?' across '+multiN()+' projectors':''} · zoom ${Math.round(view.zoom*100)}%${blind?' · BLIND: the output holds until Go':''}${tilt.on?' · 3D VIEW: drag to orbit, scroll to spread, D to return':''}`;
   const z=$('zoomInfo');if(z)z.textContent=Math.round(view.zoom*100)+'%';
 }
 function layout(){
@@ -1281,6 +1432,7 @@ function drawOverlay(){
   const dpr=ov.width/CW;octx.setTransform(dpr,0,0,dpr,0,0);octx.clearRect(0,0,CW,CH);
   if(!project) return;
   if(document.body.classList.contains('output')){if(align)drawAlign(octx,CW,CH,null);return}
+  if(tilt.k>0){drawTiltOverlay();return}
   octx.strokeStyle='#2f3740';octx.lineWidth=1;octx.strokeRect(VR.x-.5,VR.y-.5,VR.w+1,VR.h+1);
   if(multiN()>1)for(let k=0;k<multiN();k++){const [a,b]=regionOf(k),bl=blendOf(k);  // projector slices, with their blend zones shaded
     octx.setLineDash([3,5]);octx.strokeStyle='#ffb54766';octx.strokeRect(VR.x+a*VR.w+.5,VR.y+.5,(b-a)*VR.w-1,VR.h-1);octx.setLineDash([]);
@@ -1328,6 +1480,23 @@ function drawOverlay(){
   });
 }
 
+// 3D view overlay: the wall frame, each surface outline and name at its depth, drop lines from the selected one to the wall
+function drawTiltOverlay(){
+  const path=P=>{octx.beginPath();P.forEach(([x,y],k)=>k?octx.lineTo(x,y):octx.moveTo(x,y));octx.closePath()};
+  octx.lineWidth=1;octx.strokeStyle='#2f3740';path([[0,0],[1,0],[1,1],[0,1]].map(p=>proj3(p,0)));octx.stroke();
+  const items=project.surfaces.map((s,i)=>({s,i,z:tiltZ(s)})).sort((a,b)=>a.z-b.z);tilt.hits=[];
+  octx.font='500 11px "IBM Plex Sans",sans-serif';octx.textAlign='center';octx.textBaseline='middle';
+  items.forEach(({s,i,z})=>{
+    const on=selKind==='s'&&i===sel,col=PALETTE[i%PALETTE.length],poly=geometry(s).poly.map(p=>proj3(p,z));
+    tilt.hits.unshift({i,poly});
+    if(on){octx.setLineDash([2,4]);octx.strokeStyle=col+'77';octx.beginPath();
+      s.pts.forEach(p=>{const a=proj3(p,z),b=proj3(p,0);octx.moveTo(a[0],a[1]);octx.lineTo(b[0],b[1])});octx.stroke()}
+    octx.setLineDash(s.visible?[]:[4,4]);octx.lineWidth=on?1.5:1;octx.strokeStyle=on?col:col+'88';path(poly);octx.stroke();octx.setLineDash([]);
+    const c=proj3(centroid(s.pts),z),txt=(project.surfaces.length-i)+'  '+s.name,w=octx.measureText(txt).width+12;
+    octx.fillStyle='rgba(0,0,0,.7)';octx.fillRect(c[0]-w/2,c[1]-9,w,18);octx.fillStyle=on?col:'#aab';octx.fillText(txt,c[0],c[1]);
+  });
+}
+
 // alignment guides drawn on the projected image itself: every outline, the selected item's handles,
 // and a full-screen crosshair through the selected point
 function drawAlign(ctx,w,h,region){
@@ -1359,6 +1528,7 @@ ov.addEventListener('pointerdown',e=>{
   if(!project) return;
   if(e.button===1||spaceDown){e.preventDefault();drag={type:'pan',x:e.clientX,y:e.clientY,px:view.panX,py:view.panY};ov.setPointerCapture(e.pointerId);return}
   if(e.button!==0) return;
+  if(tilt.on){drag={type:'orbit',x:e.clientX,y:e.clientY,yaw:tilt.yaw,pitch:tilt.pitch,moved:false};ov.setPointerCapture(e.pointerId);return}
   const {x,y}=evtPos(e),n=toN(x,y),S=project.surfaces,M=project.masks;
   const near=(p,r=11)=>{const[a,b]=toPx(p);return (a-x)**2+(b-y)**2<r*r};
   const start=(type,it)=>{drag={type,x:e.clientX,y:e.clientY,orig:shapeOf(it)};
@@ -1391,6 +1561,8 @@ ov.addEventListener('pointerdown',e=>{
 ov.addEventListener('pointermove',e=>{
   if(!drag)return;
   if(drag.type==='pan'){view.panX=drag.px+e.clientX-drag.x;view.panY=drag.py+e.clientY-drag.y;computeView();return}
+  if(drag.type==='orbit'){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>4)drag.moved=true;
+    if(drag.moved){tilt.yaw=clamp(drag.yaw+dx*.3,-70,70);tilt.pitch=clamp(drag.pitch+dy*.3,-60,60)}return}
   const it=selKind==='m'?project.masks[sel]:project.surfaces[sel];if(!it)return;
   const dx=(e.clientX-drag.x)/VR.w,dy=(e.clientY-drag.y)/VR.h;
   if(drag.type==='move'){shiftItem(it,dx,dy,drag.orig)}
@@ -1402,9 +1574,12 @@ ov.addEventListener('pointermove',e=>{
     setHandle(it,selPt,np);for(const l of drag.linked)setHandle(l.it,l.k,np.slice())}
   coords();
 });
-ov.addEventListener('pointerup',()=>{if(drag){const t=drag.type;drag=null;if(t!=='pan'){scheduleSave();commit()}}});
+ov.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;
+  if(d.type==='orbit'){if(!d.moved){const {x,y}=evtPos(e),h=tilt.hits.find(h=>pip([x,y],h.poly));if(h)select('s',h.i)}return}  // a click in 3D view selects
+  if(d.type!=='pan'){scheduleSave();commit()}});
 ov.addEventListener('wheel',e=>{
   if(document.body.classList.contains('output'))return;e.preventDefault();
+  if(tilt.on&&!e.ctrlKey){tilt.sep=clamp(tilt.sep*Math.exp(-e.deltaY*.002),.05,1.5);return}  // 3D view: scroll spreads the layers
   const {x,y}=evtPos(e),n=toN(x,y);
   view.zoom=clamp(view.zoom*Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),.25,20);computeView();
   const [px,py]=toPx(n);view.panX+=x-px;view.panY+=y-py;computeView();
@@ -1451,7 +1626,7 @@ function openOutput(k=0){
     const gc=d.getElementById('g'),gx=gc.getContext('2d');let guides=false;
     // this loop also advances audio, tempo and scene playback, so the show keeps running when the editor window is hidden
     const loop=()=>{if(w.closed||outs.get(k)!==me)return;
-      try{R.fit(w);const t=tick(),j=slotOf(k);R.draw(outList(t),t,{testGrid,blackout,master:project.master,masks:outMasks(),region:regionOf(j),blend:blendOf(j)});
+      try{R.fit(w);const t=tick(),j=slotOf(k);R.draw(outList(t),t,{testGrid,blackout,master:project.master,masks:outMasks(),light:outLight(),region:regionOf(j),blend:blendOf(j)});
         if(align||guides){const dpr=w.devicePixelRatio||1,cw=w.innerWidth,ch=w.innerHeight;
           if(gc.width!==Math.round(cw*dpr)||gc.height!==Math.round(ch*dpr)){gc.width=Math.round(cw*dpr);gc.height=Math.round(ch*dpr)}
           gx.setTransform(dpr,0,0,dpr,0,0);gx.clearRect(0,0,cw,ch);if(align)drawAlign(gx,cw,ch,regionOf(j));guides=align}
@@ -1476,7 +1651,8 @@ function syncOutputSize(){
    BLIND EDITING  (the output holds a frozen copy, the "program", until Go)
    ===================================================================== */
 let blind=false,program=null,progFade=null;
-const snapProg=()=>({surfaces:project.surfaces.map(s=>Object.assign(clone(s),{_ck:'#p'})),masks:clone(project.masks)});
+const snapProg=()=>({surfaces:project.surfaces.map(s=>Object.assign(clone(s),{_ck:'#p'})),masks:clone(project.masks),light:clone(project.light)});
+const outLight=()=>program?program.light:project.light;
 function outList(t){if(!program)return drawList(t);const L=fadeList(program.surfaces,progFade,t);if(!L)progFade=null;return L||program.surfaces}
 const outMasks=()=>program?program.masks:project.masks;
 // send the editor's state to the output, using the current scene's transition
@@ -1520,10 +1696,11 @@ function renderTop(){
 function surfName(id){const s=project.surfaces.find(x=>x.id===id);return s?s.name:'missing surface'}
 function renderList(){
   const L=$('list'),S=project.surfaces;
-  L.innerHTML=S.length?S.map((s,i)=>({s,i})).reverse().map(({s,i})=>`<div class="item${selKind==='s'&&i===sel?' sel':''}${s.visible?'':' hid'}" data-i="${i}">
-    <span class="sw" style="background:${PALETTE[i%PALETTE.length]}"></span><span class="nm">${esc(s.name)}</span>
+  L.innerHTML=S.length?(S.length>1?'<span class="cap">Front</span>':'')+S.map((s,i)=>({s,i})).reverse().map(({s,i})=>`<div class="item${selKind==='s'&&i===sel?' sel':''}${s.visible?'':' hid'}" data-i="${i}" title="Drag to change what sits in front">
+    <span class="ly">${S.length-i}</span><span class="sw" style="background:${PALETTE[i%PALETTE.length]}"></span><span class="nm">${esc(s.name)}</span>
     <span class="md">${s.warp==='mesh'?'mesh · ':''}${esc((SH[s.shader]||{}).name||s.shader)}</span><button class="vis" data-vis="${i}" title="Show or hide">${s.visible?'ON':'off'}</button></div>`).join('')
     :'<div class="empty">No surfaces yet. Add one, then drag its corners onto your object.</div>';
+  if(S.length>1)L.insertAdjacentHTML('beforeend','<span class="cap">Back</span>');
   const ML=$('mlist'),M=project.masks;
   ML.innerHTML=M.length?M.map((m,i)=>({m,i})).reverse().map(({m,i})=>`<div class="item msk${selKind==='m'&&i===sel?' sel':''}${m.visible?'':' hid'}" data-mi="${i}">
     <span class="sw m"></span><span class="nm">${esc(m.name)}</span>
@@ -1531,9 +1708,37 @@ function renderList(){
     :'<div class="empty">Masks hide light where you don\'t want it: windows, doors, or anything in the way.</div>';
 }
 $('list').addEventListener('click',e=>{
+  if(ldragged){ldragged=false;return}
   const v=e.target.closest('[data-vis]');if(v){const s=project.surfaces[+v.dataset.vis];s.visible=!s.visible;renderList();scheduleSave();commit();return}
   const it=e.target.closest('[data-i]');if(it)select('s',+it.dataset.i);
 });
+// stacking: the list shows the front surface on top; drag a row to restack
+function moveLayer(from,to){
+  const S=project.surfaces;to=clamp(to,0,S.length-1);if(from===to||!S[from])return;
+  const cur=selKind==='s'?S[sel]:null,[x]=S.splice(from,1);S.splice(to,0,x);
+  if(cur)sel=S.indexOf(cur);renderAll();scheduleSave();commit();
+}
+let ldrag=null,ldragged=false;
+$('list').addEventListener('pointerdown',e=>{const it=e.target.closest('[data-i]');if(!it||e.button!==0||e.target.closest('[data-vis]'))return;
+  ldrag={i:+it.dataset.i,y:e.clientY,id:e.pointerId,on:false,order:null}});
+$('list').addEventListener('pointermove',e=>{
+  if(!ldrag)return;const L=$('list');
+  if(!ldrag.on){if(Math.abs(e.clientY-ldrag.y)<5)return;ldrag.on=true;L.setPointerCapture(ldrag.id);L.classList.add('dragging')}
+  const rows=[...L.querySelectorAll('[data-i]')].filter(el=>+el.dataset.i!==ldrag.i);
+  let p=rows.findIndex(el=>{const r=el.getBoundingClientRect();return e.clientY<r.top+r.height/2});if(p<0)p=rows.length;
+  L.querySelectorAll('.drop-before,.drop-after').forEach(el=>el.classList.remove('drop-before','drop-after'));
+  if(rows.length)p<rows.length?rows[p].classList.add('drop-before'):rows[rows.length-1].classList.add('drop-after');
+  const vis=rows.map(el=>+el.dataset.i);vis.splice(p,0,ldrag.i);ldrag.order=vis.reverse();  // back to front
+});
+function endListDrag(apply){
+  if(!ldrag)return;const d=ldrag;ldrag=null;if(!d.on)return;ldragged=true;setTimeout(()=>ldragged=false,0);
+  $('list').classList.remove('dragging');
+  if(apply&&d.order&&d.order.some((v,k)=>v!==k)){const S=project.surfaces,cur=selKind==='s'?S[sel]:null;
+    project.surfaces=d.order.map(i=>S[i]);if(cur)sel=project.surfaces.indexOf(cur);renderAll();scheduleSave();commit()}
+  else renderList();
+}
+$('list').addEventListener('pointerup',()=>endListDrag(true));
+$('list').addEventListener('pointercancel',()=>endListDrag(false));
 $('mlist').addEventListener('click',e=>{
   const v=e.target.closest('[data-mvis]');if(v){const m=project.masks[+v.dataset.mvis];m.visible=!m.visible;renderList();scheduleSave();commit();return}
   const it=e.target.closest('[data-mi]');if(it)select('m',+it.dataset.mi);
@@ -1542,6 +1747,8 @@ $('mlist').addEventListener('click',e=>{
 function renderViewPanel(){
   if(!project)return;
   $('xrayBtn').classList.toggle('on',xray);
+  $('tiltBtn').classList.toggle('on',tilt.on);$('tiltBtn2').classList.toggle('on',tilt.on);
+  document.querySelectorAll('#tiltBy [data-tb]').forEach(b=>b.classList.toggle('on',b.dataset.tb===tilt.by));ov.classList.toggle('orbit',tilt.on);
   const has=!!project.bg.mediaId;$('bgActions').hidden=!has;$('bgPick').textContent=has?'Replace photo…':'Choose photo…';
   $('bgShow').textContent=bgHidden?'Show photo':'Hide photo';
   $('bgOpac').value=project.bg.opacity;$('bgOpac').nextElementSibling.textContent=fmt(project.bg.opacity);
@@ -1607,6 +1814,19 @@ function renderProps(){
     ${nm?`<div class="note">${nm} mask${nm===1?'':'s'} affect${nm===1?'s':''} this surface.</div>`:''}
   </section>
   <section>
+    <span class="lbl">Depth</span>
+    <div class="seg" id="faceSeg" role="group" aria-label="Which way this surface faces">${FACES.map(f=>`<button data-face="${f.k}" class="${faceOf(s)===f.k?'on':''}">${f.l}</button>`).join('')}</div>
+    <div class="grid2">
+      ${rangeRow('dYaw','Turn',-80,80,1,s.yaw)}
+      ${rangeRow('dPitch','Tilt',-80,80,1,s.pitch)}
+      ${rangeRow('dZ','Distance',0,1,.01,s.z)}
+      ${rangeRow('dEdge','Corner shade',0,1,.01,s.edgeShade)}
+      <label>Shadow</label><label class="check"><input type="checkbox" id="dShadow"${s.castShadow?' checked':''}> Cast a shadow behind</label>
+    </div>
+    <div class="note">${project.light.on?'Pick the way this face points on the real object. Distance 0 is nearest the projector.':'Pick the way this face points on the real object, then turn the light on under Depth &amp; light. Distance 0 is nearest the projector.'}</div>
+    <div class="row"><button id="dSort" title="Restack every surface so the farthest sits at the back">Sort layers by distance</button></div>
+  </section>
+  <section>
     <span class="lbl">Look</span>
     <div class="grid2">
       ${rangeRow('cSpeed','Speed',0,4,.05,s.speed)}
@@ -1643,7 +1863,7 @@ function renderProps(){
     <span class="lbl">${mesh?'Points':'Corners'} (output px)</span>
     <div class="coords" id="coords"></div>
     <div class="row">
-      <button id="aDup">Duplicate</button><button id="aUp" class="icon" title="Bring forward">▲</button><button id="aDown" class="icon" title="Send back">▼</button>
+      <button id="aDup">Duplicate</button><button id="aUp" class="icon" title="Bring forward (]) · Shift: to the front">▲</button><button id="aDown" class="icon" title="Send back ([) · Shift: to the back">▼</button>
       <button id="aReset">Reset shape</button><button id="aDel" class="danger">Delete</button>
     </div>
   </section>`;
@@ -1712,7 +1932,7 @@ function coords(){
   const H2=handlesOf(s);if(H2.length>4){el.innerHTML=`<span>${H2.length} points</span><span class="on">${selPt>=0&&H2[selPt]?'Point '+(selPt+1)+': '+f(H2[selPt]):'No point selected'}</span>`}
   else el.innerHTML=s.pts.map((p,k)=>`<span class="${k===selPt?'on':''}">${k+1}: ${f(p)}</span>`).join('');
 }
-function renderAll(){renderOutPanel();renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderMidi()}
+function renderAll(){renderOutPanel();renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderLight();renderMidi()}
 
 /* property events (delegated, so they survive re-renders) */
 $('props').addEventListener('input',e=>{
@@ -1737,6 +1957,9 @@ $('props').addEventListener('input',e=>{
   else if(t.id==='rTR')s.round[1]=+t.value;
   else if(t.id==='rBR')s.round[2]=+t.value;
   else if(t.id==='rBL')s.round[3]=+t.value;
+  else if(t.id==='dYaw'||t.id==='dPitch'){s[t.id==='dYaw'?'yaw':'pitch']=+t.value;document.querySelectorAll('#faceSeg [data-face]').forEach(b=>b.classList.toggle('on',b.dataset.face===faceOf(s)))}
+  else if(t.id==='dZ')s.z=+t.value;
+  else if(t.id==='dEdge')s.edgeShade=+t.value;
   else return;
   scheduleSave();
 });
@@ -1755,10 +1978,17 @@ $('props').addEventListener('change',async e=>{
     try{s.mediaId=await addMediaFile(f);scheduleSave();commit();renderProps();toast('Saved '+f.name+' to this project')}
     catch(err){toast('Could not store that file: '+(err&&err.name||err))}return}
   if(t.id==='mCols'||t.id==='mRows'){setMesh(s,+$('mCols').value,+$('mRows').value);selPt=-1;renderProps();scheduleSave();commit();return}
+  if(t.id==='dShadow'){s.castShadow=t.checked;scheduleSave();if(t.checked&&!project.light.on)toast('Shadows show once the light is on (Depth & light, left panel)')}
   commit();
 });
 $('props').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;const id=b.id;
+  if(selKind==='s'&&project.surfaces[sel]){const s=project.surfaces[sel],S=project.surfaces;
+    if(b.dataset.face){const f=FACES.find(x=>x.k===b.dataset.face);s.yaw=f.yaw;s.pitch=f.pitch;renderProps();scheduleSave();commit();return}
+    if(id==='dSort'){const cur=S[sel];project.surfaces=S.slice().sort((a,c)=>c.z-a.z);sel=project.surfaces.indexOf(cur);renderAll();scheduleSave();commit();
+      toast(S.every(x=>x.z===S[0].z)?'Every surface is at the same distance. Set Distance on each one first.':'Restacked: the farthest surface sits at the back');return}
+    if(id==='aUp'){moveLayer(sel,e.shiftKey?S.length-1:sel+1);return}
+    if(id==='aDown'){moveLayer(sel,e.shiftKey?0:sel-1);return}}
   if(selKind==='m'){const m=project.masks[sel];if(!m)return;
     if(id==='kDup'){const c=clone(m);c.id=uid('k');c.name=m.name+' copy';c.pts=m.pts.map(([x,y])=>[x+.03,y+.03]);project.masks.splice(sel+1,0,c);select('m',sel+1);scheduleSave();commit()}
     else if(id==='kReset'){m.pts=squareAround(centroid(m.pts),.12);selPt=-1;coords();scheduleSave();commit()}
@@ -1787,8 +2017,6 @@ $('props').addEventListener('click',e=>{
   if(id==='cFlipX'){s.flipX=!s.flipX;b.classList.toggle('on',s.flipX)}
   else if(id==='cFlipY'){s.flipY=!s.flipY;b.classList.toggle('on',s.flipY)}
   else if(id==='aDup')return duplicate();
-  else if(id==='aUp'){if(sel<project.surfaces.length-1){const S=project.surfaces;[S[sel],S[sel+1]]=[S[sel+1],S[sel]];sel++;renderAll()}else return}
-  else if(id==='aDown'){if(sel>0){const S=project.surfaces;[S[sel],S[sel-1]]=[S[sel-1],S[sel]];sel--;renderAll()}else return}
   else if(id==='aReset'){const rect=[[.3,.3],[.7,.3],[.7,.7],[.3,.7]];s.edges=noEdges();if(s.warp==='mesh'){const c=s.mesh.cols,r=s.mesh.rows;s.warp='quad';s.pts=rect;setMesh(s,c,r)}else s.pts=rect;selPt=-1;renderProps()}
   else if(id==='aDel'){return arm(b,'Click again to delete',()=>{const gone=project.surfaces.splice(sel,1)[0];project.masks=project.masks.filter(m=>m.target!==gone.id);
     sel=Math.max(0,sel-1);selPt=-1;renderAll();scheduleSave();commit()})}
@@ -1831,6 +2059,9 @@ function addMask(){
 $('add').onclick=addSurface;$('addMask').onclick=addMask;
 $('xrayBtn').onclick=()=>{xray=!xray;renderViewPanel()};
 $('fitBtn').onclick=fitView;
+$('tiltBtn').onclick=$('tiltBtn2').onclick=()=>setTilt(!tilt.on);
+$('tiltBy').addEventListener('click',e=>{const b=e.target.closest('[data-tb]');if(!b)return;tilt.by=b.dataset.tb;renderViewPanel();
+  if(tilt.by==='distance'&&project.surfaces.every(x=>x.z===project.surfaces[0].z))toast('All surfaces share one distance. Set Distance under Depth to spread them.')});
 $('bgPick').onclick=()=>$('bgFile').click();
 $('bgFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
   try{project.bg.mediaId=await addMediaFile(f);bgHidden=false;renderViewPanel();scheduleSave();commit();toast('Photo added behind the editor view')}catch(err){toast('Could not store that photo: '+(err&&err.name||err))}};
@@ -1929,6 +2160,19 @@ $('tBpm').onchange=e=>{const tp=project.tempo,t=now(),ph=tp.on?tempoPhase(t):0;t
 $('tTap').onclick=tapTempo;
 $('tSync').onclick=()=>{TEMPO.t0=now();if(!project.tempo.on){project.tempo.on=true;scheduleSave()}renderTempo()};
 
+/* depth & light panel */
+const LIGHT_RANGES={lAz:'az',lEl:'el',lAmt:'amount',lAmb:'ambient',lSpeed:'speed',lShadow:'shadow',lShLen:'shadowLen'};
+function renderLight(){
+  if(!project)return;const L=project.light;
+  document.querySelectorAll('#lOn [data-lon]').forEach(b=>b.classList.toggle('on',(b.dataset.lon==='1')===!!L.on));
+  document.querySelectorAll('#lAnim [data-la]').forEach(b=>b.classList.toggle('on',b.dataset.la===L.anim));
+  for(const id in LIGHT_RANGES){const el=$(id);el.value=L[LIGHT_RANGES[id]];el.nextElementSibling.textContent=fmt(el.value)}
+}
+$('lOn').addEventListener('click',e=>{const b=e.target.closest('[data-lon]');if(!b)return;project.light.on=b.dataset.lon==='1';renderLight();renderProps();scheduleSave();
+  if(project.light.on&&project.surfaces.every(s=>!s.yaw&&!s.pitch))toast('Every surface faces front, so they all get the same light. Set Face under Depth for each one.')});
+$('lAnim').addEventListener('click',e=>{const b=e.target.closest('[data-la]');if(!b)return;project.light.anim=b.dataset.la;renderLight();scheduleSave()});
+$('lightFold').addEventListener('input',e=>{const k=LIGHT_RANGES[e.target.id];if(!k)return;project.light[k]=+e.target.value;e.target.nextElementSibling.textContent=fmt(e.target.value);scheduleSave()});
+
 /* midi panel */
 $('midiBody').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const M=project.midi.maps;
   if(b.id==='midiConnect')midiConnect(false);
@@ -1948,7 +2192,7 @@ function onKey(e){
   if(!$('drawer').hidden){if(e.key==='Escape')closeDrawer();return}
   const t=e.target,tag=(t.tagName||'').toLowerCase(),typing=tag==='textarea'||(tag==='input'&&/text|number/.test(t.type));
   const single=document.body.classList.contains('output');
-  if(e.key==='Escape'){if(single)setSingle(false);else{selPt=-1;coords()}return}
+  if(e.key==='Escape'){if(single)setSingle(false);else if(tilt.on)setTilt(false);else{selPt=-1;coords()}return}
   if(typing) return;
   if(e.key==='Enter'&&blind&&tag!=='button'&&tag!=='select'){e.preventDefault();goLive();toast('Sent to the output');return}
   const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
@@ -1965,6 +2209,9 @@ function onKey(e){
   if(k==='a'){align=!align;renderTop();return}
   if(single&&!align) return;  // with Align on, corners can be nudged while looking at the projected image
   if(k==='x'){xray=!xray;renderViewPanel();return}
+  if(k==='d'&&!single){setTilt(!tilt.on);return}
+  if((e.code==='BracketLeft'||e.code==='BracketRight')&&selKind==='s'&&project.surfaces[sel]){e.preventDefault();const up=e.code==='BracketRight',n=project.surfaces.length;
+    moveLayer(sel,e.shiftKey?(up?n-1:0):sel+(up?1:-1));return}
   if(k==='0'){fitView();return}
   if(tag==='select'||(tag==='input'&&t.type==='range')) return;
   const arr=selKind==='m'?project.masks:project.surfaces,it=arr[sel];
@@ -2185,9 +2432,13 @@ function tick(){
 function frame(){
   if(project){
     const t=tick();editR.fit(window);
+    const tg=tilt.on&&!document.body.classList.contains('output')?1:0;  // ease the 3D view in and out
+    if(tilt.k!==tg){tilt.k=reduceMotion()?tg:tilt.k+(tg-tilt.k)*Math.min(1,(t-(frame.t||t))*9||.15);if(Math.abs(tilt.k-tg)<.003)tilt.k=tg}
+    frame.t=t;
     $('tapDot').style.opacity=project.tempo.on?.15+.85*TEMPO.pulse:.15;
     const single=document.body.classList.contains('output'),dpr=glc.width/CW;
     editR.draw(single?outList(t):drawList(t),t,{testGrid,blackout,master:project.master,editor:!single,xray:xray&&!single,masks:single?outMasks():project.masks,
+      light:single?outLight():project.light,tilt:!single&&tilt.k>0?{k:tilt.k,yaw:tilt.yaw,pitch:tilt.pitch,z:tiltZ}:null,
       bg:!single&&!bgHidden?project.bg:null,view:{x:VR.x*dpr,y:VR.y*dpr,w:VR.w*dpr,h:VR.h*dpr}});
     drawOverlay();drawMeter();drawTimeline();
   }
