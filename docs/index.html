@@ -256,6 +256,25 @@ textarea.code{height:200px;font:400 11px/1.5 var(--f-mono);white-space:pre;tab-s
       <div class="note">Set which way each surface faces under Depth in its properties. The light then shades the faces like a real object, and surfaces set to Cast shadow darken whatever sits behind them. Depth effects use this light too.</div>
     </div>
   </details>
+  <details class="fold" id="roomFold">
+    <summary><span class="lbl">Room &amp; projector</span></summary>
+    <div class="fold-body">
+      <label class="check"><input type="checkbox" id="rmShow"> Show the room in 3D view</label>
+      <div class="seg" id="rmUnits"><button data-ru="m">Metres</button><button data-ru="ft">Feet</button></div>
+      <div class="grid2" id="rmGrid">
+        <label for="rmW">Room width</label><input type="number" id="rmW" data-rk="w" min="0" step="0.1">
+        <label for="rmD">Room depth</label><input type="number" id="rmD" data-rk="d" min="0" step="0.1">
+        <label for="rmH">Ceiling</label><input type="number" id="rmH" data-rk="h" min="0" step="0.1">
+        <label for="rmDist">Throw distance</label><input type="number" id="rmDist" data-rk="dist" min="0" step="0.05" title="From the projector lens to the wall">
+        <label for="rmThrow">Throw ratio</label><input type="number" id="rmThrow" data-rk="throw" min="0.1" step="0.01" title="Distance ÷ picture width, from the projector's manual">
+        <label for="rmLens">Projector height</label><input type="number" id="rmLens" data-rk="lensH" min="0" step="0.05">
+        <label for="rmPicY">Picture bottom</label><input type="number" id="rmPicY" data-rk="picY" min="0" step="0.05" title="Height of the picture's bottom edge above the floor">
+      </div>
+      <div class="note" id="rmInfo"></div>
+      <div class="row"><button id="rmFill" title="Move the projector so the picture fills the wall's width">Fill the wall</button><button id="rmSee">See it in 3D (D)</button></div>
+      <div class="note">The throw ratio is in the projector's manual: distance ÷ picture width. Most are 1.2–2.0; short-throw models are around 0.5.</div>
+    </div>
+  </details>
   <details class="fold" id="outFold">
     <summary><span class="lbl">Output &amp; projectors</span></summary>
     <div class="fold-body" id="outBody"></div>
@@ -557,8 +576,11 @@ const CATS=['Utility','Pattern','Organic','Motion','Depth','Media','Text','Custo
 
 /* Every surface is drawn as a fine triangle grid (GRID×GRID cells) in output space.
    aPos = output position 0..1 (y down), aUV = surface coordinate 0..1. */
-const VERT=`attribute vec2 aPos;attribute vec2 aUV;uniform vec4 uView;uniform mat4 uM;uniform float uZ;varying vec2 vUV;varying vec2 vOut;
-void main(){vUV=aUV;vOut=aPos;gl_Position=uM*vec4(aPos*uView.xy+uView.zw,uZ,1.);}`;  // uM / uZ: the editor's 3D view (identity and 0 everywhere else)
+const VERT=`attribute vec2 aPos;attribute vec2 aUV;uniform vec4 uView;uniform mat4 uM;uniform float uZ;uniform vec4 uCone;varying vec2 vUV;varying vec2 vOut;
+void main(){vUV=aUV;vOut=aPos;vec3 q=vec3(aPos,uZ);if(uCone.w<1.)q=uCone.xyz+(vec3(aPos,0.)-uCone.xyz)*uCone.w;
+ gl_Position=uM*vec4(q.xy*uView.xy+uView.zw,q.z,1.);}`;
+// uM / uZ / uCone: the editor's 3D view (identity, 0 and off everywhere else). uCone = projector lens (xyz) and how far
+// along the light from the lens to the wall this surface sits (w; 1 = on the wall, so off)
 const HEAD=`precision highp float;
 varying vec2 vUV; varying vec2 vOut;
 uniform float uTime,uAspect,uGeoAspect,uTexAspect,uBright,uOpac,uFeather,uRot,uHasMask,uXray; uniform vec2 uFlip; uniform vec4 uRad;
@@ -618,7 +640,7 @@ function customSrc(code){const toy=/\bmainImage\s*\(/.test(code),pre=HEAD+declFo
   return {src:pre+code+(toy?TOY_POST:'')+MAIN,off:pre.split('\n').length-1}}
 const hashStr=t=>{let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return (h>>>0).toString(36)+'_'+t.length};
 const customErr=new Map();
-const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace','uClip','uGrade','uTint','uOGain','uOGamma','uM','uZ','uNormal','uLight','uDepth','uEdgeShade','uShade'];
+const COMMON=['uView','uTime','uAspect','uGeoAspect','uTexAspect','uBright','uOpac','uFeather','uRot','uFlip','uRad','uHasMask','uXray','uTex','uMask','uLevel','uBass','uMid','uTreble','uBeat','uTempo','uTempoPulse','uBar','uSpace','uClip','uGrade','uTint','uOGain','uOGamma','uM','uZ','uCone','uNormal','uLight','uDepth','uEdgeShade','uShade'];
 const GRADE0={gamma:1,contrast:1,sat:1,hue:0,warm:0},CAL0={gamma:1,r:1,g:1,b:1,flipX:false,flipY:false};
 const warmTint=w=>w>=0?[1,1-.12*w,1-.4*w]:[1+.4*w,1+.12*w,1];
 const hex=h=>{h=String(h||'#000000');return [1,3,5].map(i=>(parseInt(h.substr(i,2),16)||0)/255)};
@@ -775,10 +797,15 @@ function normProject(p){
   p.cal=Object.assign({},CAL0,p.cal||{});
   p.multi=Object.assign({n:1,pw:p.output.w,ph:p.output.h,ov:0,curve:2,gamma:2.2},p.multi||{});
   p.player=Object.assign({autoplay:true,audio:'off',on:'',off:''},p.player||{});
-  p.light=Object.assign({},LIGHT0,p.light||{});return p;
+  p.light=Object.assign({},LIGHT0,p.light||{});p.room=normRoom(p.room);return p;
 }
 /* Depth model. Each surface says which way it faces (yaw: turned left / right, pitch: tilted up / down, in degrees)
    and how far it is (z: 0 near … 1 far). Directions use x right, y down, z towards the viewer. */
+// the room shown in the 3D view, in metres: dist = projector to wall, throw = throw ratio, lensH = projector height, picY = picture bottom
+const ROOM0={show:true,units:'m',w:6,d:5,h:3,dist:3,throw:1.5,lensH:1.2,picY:.6};
+function normRoom(r){r=Object.assign({},ROOM0,r||{});const n=(k,a,b)=>r[k]=clamp(+r[k]||ROOM0[k],a,b);
+  n('w',.5,100);n('d',.5,100);n('h',.5,40);n('dist',.2,100);n('throw',.1,10);r.lensH=clamp(+r.lensH||0,0,40);r.picY=clamp(+r.picY||0,0,40);
+  r.units=r.units==='ft'?'ft':'m';r.show=r.show!==false;return r}
 const LIGHT0={on:false,az:-40,el:45,amount:.6,ambient:.35,anim:'off',speed:.2,shadow:.5,shadowLen:.04};
 const FACES=[{k:'front',l:'Front',yaw:0,pitch:0},{k:'left',l:'Left',yaw:-50,pitch:0},{k:'right',l:'Right',yaw:50,pitch:0},{k:'top',l:'Top',yaw:0,pitch:60},{k:'bottom',l:'Under',yaw:0,pitch:-60}];
 const faceOf=s=>(FACES.find(f=>f.yaw===(+s.yaw||0)&&f.pitch===(+s.pitch||0))||{}).k;
@@ -1215,12 +1242,13 @@ const PLATE={id:'__plate',name:'',shader:'solid',params:{solid:{c1:'#000000'}},p
 function tiltCore(T,Hf){
   const a=T.yaw*T.k*Math.PI/180,b=T.pitch*T.k*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),cb=Math.cos(b),sb=Math.sin(b);
   // rows: rotated X, Y, Z from X, Y, Z (yaw about the vertical axis, then pitch about the horizontal one)
-  return {R:[[ca,0,sa],[sa*sb,cb,-ca*sb],[-sa*cb,sb,ca*cb]],D:2.6*Hf,sc:1-.12*T.k};
+  // with a room shown: pivot halfway into the room (pz), weaker perspective (ext) and zoomed out to fit (fit)
+  return {R:[[ca,0,sa],[sa*sb,cb,-ca*sb],[-sa*cb,sb,ca*cb]],D:Hf*Math.max(2.6,(T.ext||0)*2.4),sc:(1-.12*T.k)*(1+((T.fit??1)-1)*T.k),pz:(T.pz||0)*T.k};
 }
 function tiltMatrix(T,view,cw,ch){
-  const hw=cw/2,hh=ch/2,cx=(.5*view[0]+view[2])*hw,cy=(.5*view[1]+view[3])*hh,Hf=Math.abs(view[1])*hh,{R,D,sc}=tiltCore(T,Hf);
-  // input (clip x, clip y, z, 1) → X = hw·x − cx, Y = hh·y − cy, Z = Hf·z, then rotate
-  const row=r=>[R[r][0]*hw,R[r][1]*hh,R[r][2]*Hf,-(R[r][0]*cx+R[r][1]*cy)];
+  const hw=cw/2,hh=ch/2,cx=(.5*view[0]+view[2])*hw,cy=(.5*view[1]+view[3])*hh,Hf=Math.abs(view[1])*hh,{R,D,sc,pz}=tiltCore(T,Hf);
+  // input (clip x, clip y, z, 1) → X = hw·x − cx, Y = hh·y − cy, Z = Hf·(z − pz), then rotate
+  const row=r=>[R[r][0]*hw,R[r][1]*hh,R[r][2]*Hf,-(R[r][0]*cx+R[r][1]*cy+R[r][2]*Hf*pz)];
   const X=row(0),Y=row(1),Z=row(2),W=Z.map((v,j)=>(j===3?1:0)-v/D);
   const xr=X.map((v,j)=>(sc*v+cx*W[j])/hw),yr=Y.map((v,j)=>(sc*v+cy*W[j])/hh),zr=[0,0,0,0],M=new Float32Array(16);
   [xr,yr,zr,W].forEach((r,ri)=>r.forEach((v,c)=>M[c*4+ri]=v));return M;
@@ -1299,7 +1327,7 @@ class Renderer{
     gl.viewport(0,0,cw,ch);
     const view=[2*V.w/cw,-2*V.h/ch,2*V.x/cw-1,1-2*V.y/ch];
     this.M=o.tilt?tiltMatrix(o.tilt,view,cw,ch):IDENT;
-    if(o.editor&&o.tilt){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);this.one(PLATE,0,Object.assign({},o,{noMasks:true,testGrid:false}),view,0)}  // 3D view: the output frame is a black wall
+    if(o.editor&&o.tilt){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);if(o.tilt.room)this.drawRoom(o.tilt.room,view);this.one(PLATE,0,Object.assign({},o,{noMasks:true,testGrid:false}),view,0)}  // 3D view: the output frame is a black wall
     else if(o.editor){gl.clearColor(.043,.055,.067,1);gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.SCISSOR_TEST);gl.scissor(Math.round(V.x),Math.round(ch-V.y-V.h),Math.max(0,Math.round(V.w)),Math.max(0,Math.round(V.h)));
       gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.disable(gl.SCISSOR_TEST)}
@@ -1336,7 +1364,8 @@ class Renderer{
       gl.useProgram(P.p);
       gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);gl.bufferData(gl.ARRAY_BUFFER,g.data,gl.DYNAMIC_DRAW);this.attribs(this.vbo);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
-      gl.uniform4fv(u.uView,view);gl.uniformMatrix4fv(u.uM,false,this.M);gl.uniform1f(u.uZ,z);
+      const cn=o.tilt&&o.tilt.cone&&s!==PLATE?o.tilt.cone(s):null;
+      gl.uniform4fv(u.uView,view);gl.uniformMatrix4fv(u.uM,false,this.M);gl.uniform1f(u.uZ,z);gl.uniform4fv(u.uCone,cn||[0,0,0,1]);
       gl.uniform1f(u.uTime,o.time??getPhase(s,this.t));
       gl.uniform1f(u.uAspect,asp.content);gl.uniform1f(u.uGeoAspect,asp.geo);
       const rd=s.round||[0,0,0,0],rr=s.roundLinked!==false?[rd[0],rd[0],rd[0],rd[0]]:rd;
@@ -1368,18 +1397,36 @@ class Renderer{
   }
   // soft edge where neighbouring projectors overlap: darkens this window's overlap so the two add up evenly
   drawBlend(b){
-    const gl=this.gl;if(!this.blP)this.blP=this.link(BLEND_FS,['uView','uL','uP','uG','uM','uZ']);if(!this.blP)return;
+    const gl=this.gl;if(!this.blP)this.blP=this.link(BLEND_FS,['uView','uL','uP','uG','uM','uZ','uCone']);if(!this.blP)return;
     const c=project.cal,v=[c.flipX?-2:2,c.flipY?2:-2,c.flipX?1:-1,c.flipY?-1:1];
     gl.useProgram(this.blP.p);this.attribs(this.qbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.qibo);
-    gl.uniform4fv(this.blP.u.uView,v);gl.uniformMatrix4fv(this.blP.u.uM,false,IDENT);gl.uniform1f(this.blP.u.uZ,0);gl.uniform2f(this.blP.u.uL,b.l,b.r);gl.uniform1f(this.blP.u.uP,b.p);gl.uniform1f(this.blP.u.uG,b.g);
+    gl.uniform4fv(this.blP.u.uView,v);gl.uniformMatrix4fv(this.blP.u.uM,false,IDENT);gl.uniform1f(this.blP.u.uZ,0);gl.uniform4f(this.blP.u.uCone,0,0,0,1);gl.uniform2f(this.blP.u.uL,b.l,b.r);gl.uniform1f(this.blP.u.uP,b.p);gl.uniform1f(this.blP.u.uG,b.g);
     gl.blendFunc(gl.ZERO,gl.SRC_COLOR);gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
     gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   }
+  // room grid: walls and floor with lines every metre or foot, drawn before anything else so it always sits behind
+  drawRoom(data,view){
+    const gl=this.gl;
+    if(this.rmP===undefined){const dv=!!gl.getExtension('OES_standard_derivatives');
+      const fs=(dv?'#extension GL_OES_standard_derivatives : enable\n':'')+`precision highp float;varying vec3 vG;uniform vec3 uBase,uLine;
+void main(){vec2 g=vG.xy; vec2 w=${dv?'max(fwidth(g),vec2(1e-4))':'vec2(.02)'}; vec2 f=abs(fract(g-.5)-.5)/w; float l=1.-min(min(f.x,f.y),1.);
+ gl_FragColor=vec4(mix(uBase,uLine,l),vG.z);}`;
+      const vs=this.sh(gl.VERTEX_SHADER,`attribute vec3 aP;attribute vec3 aG;uniform vec4 uView;uniform mat4 uM;varying vec3 vG;
+void main(){vG=aG;gl_Position=uM*vec4(aP.xy*uView.xy+uView.zw,aP.z,1.);}`),f=this.sh(gl.FRAGMENT_SHADER,fs);this.rmP=null;
+      if(vs&&f){const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,f);gl.bindAttribLocation(p,0,'aP');gl.bindAttribLocation(p,1,'aG');gl.linkProgram(p);
+        if(gl.getProgramParameter(p,gl.LINK_STATUS))this.rmP={p,u:Object.fromEntries(['uView','uM','uBase','uLine'].map(n=>[n,gl.getUniformLocation(p,n)]))};else console.warn('Room grid',gl.getProgramInfoLog(p))}
+      if(!this.rmP)console.warn('Room grid',this.lastError);this.rmb=gl.createBuffer()}
+    if(!this.rmP)return;const u=this.rmP.u;
+    gl.useProgram(this.rmP.p);gl.bindBuffer(gl.ARRAY_BUFFER,this.rmb);gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);
+    gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12);
+    gl.uniform4fv(u.uView,view);gl.uniformMatrix4fv(u.uM,false,this.M);gl.uniform3f(u.uBase,.075,.088,.103);gl.uniform3f(u.uLine,.2,.235,.27);
+    gl.drawArrays(gl.TRIANGLES,0,data.length/6);
+  }
   drawBg(bg,view){
-    const gl=this.gl;if(!this.bgP)this.bgP=this.link(BG_FS,['uView','uTex','uOp','uM','uZ']);if(!this.bgP)return;
+    const gl=this.gl;if(!this.bgP)this.bgP=this.link(BG_FS,['uView','uTex','uOp','uM','uZ','uCone']);if(!this.bgP)return;
     gl.activeTexture(gl.TEXTURE0);const tx=this.texFor(bg.mediaId);if(!tx)return;
     gl.useProgram(this.bgP.p);this.attribs(this.qbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.qibo);
-    gl.uniform4fv(this.bgP.u.uView,view);gl.uniformMatrix4fv(this.bgP.u.uM,false,this.M);gl.uniform1f(this.bgP.u.uZ,0);gl.uniform1i(this.bgP.u.uTex,0);gl.uniform1f(this.bgP.u.uOp,1-(+bg.opacity||0));
+    gl.uniform4fv(this.bgP.u.uView,view);gl.uniformMatrix4fv(this.bgP.u.uM,false,this.M);gl.uniform1f(this.bgP.u.uZ,0);gl.uniform4f(this.bgP.u.uCone,0,0,0,1);gl.uniform1i(this.bgP.u.uTex,0);gl.uniform1f(this.bgP.u.uOp,1-(+bg.opacity||0));
     gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);
   }
 }
@@ -1397,12 +1444,53 @@ const tilt={on:false,k:0,yaw:-28,pitch:22,sep:.35,by:'layer',hits:[]};
 const reduceMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 function tiltZ(s){
   const S=project.surfaces;let i=S.findIndex(x=>x.id===s.id);if(i<0)i=0;
-  return tilt.k*tilt.sep*(tilt.by==='distance'?1-clamp(+s.z||0,0,1):(i+1)/Math.max(1,S.length));
+  if(tilt.by==='distance'){const near=1-clamp(+s.z||0,0,1);  // with the room shown, Distance is a share of the real throw distance
+    if(project.room.show){const g=roomGeo();return tilt.k*near*CONE_MAX*g.R.dist/g.fh}
+    return tilt.k*tilt.sep*near}
+  return tilt.k*tilt.sep*(i+1)/Math.max(1,S.length);
+}
+/* In the room, a surface placed out from the wall sits inside the projector's light: it slides along the rays towards
+   the lens and shrinks with them, so it shows where that part of the picture really lands. Distance 0 is CONE_MAX of
+   the way to the lens (right at the lens the picture is a point). */
+const CONE_MAX=.85;
+function coneOf(s){
+  if(tilt.by!=='distance'||!project.room.show||s.id==='__plate')return null;
+  const g=roomGeo(),R=g.R,L=g.N(R.w/2,R.lensH,R.dist),k=tilt.k,t=1-(1-clamp(+s.z||0,0,1))*CONE_MAX;
+  return [L[0],L[1],L[2]*k,1+(t-1)*k];
+}
+// where a point of surface s shows in the 3D view, matching the shader
+function surfPt(s,p){
+  const c=coneOf(s);if(!c)return proj3(p,tiltZ(s));
+  return proj3([c[0]+(p[0]-c[0])*c[3],c[1]+(p[1]-c[1])*c[3]],c[2]*(1-c[3]));
+}
+/* ROOM  (3D view only): a schematic box around the projection wall, in real units. The picture's size on the wall
+   comes from the throw: width = distance ÷ throw ratio. Lengths are stored in metres. */
+function roomGeo(){
+  const R=project.room,fw=R.dist/R.throw,fh=fw*project.output.h/project.output.w,left=(R.w-fw)/2,top=R.picY+fh;
+  return {R,fw,fh,N:(x,y,z)=>[(x-left)/fw,(top-y)/fh,z/fh]};  // metres (x right, y up from the floor, z out from the wall) → output units
+}
+// the room's walls and floor as triangles: x, y, z (output units, z already scaled by k), grid u, v (in grid steps), alpha
+function roomPlanes(g,k){
+  const {R,N}=g,st=R.units==='ft'?.3048:1,out=[];
+  const quad=(P,G,a)=>[0,1,2,0,2,3].forEach(j=>{const n=N(...P[j]);out.push(n[0],n[1],n[2]*k,G[j][0]/st,G[j][1]/st,a*k)});
+  const {w,d,h}=R;
+  quad([[0,h,0],[w,h,0],[w,0,0],[0,0,0]],[[0,h],[w,h],[w,0],[0,0]],1);           // back wall (the projection wall)
+  quad([[0,0,0],[0,h,0],[0,h,d],[0,0,d]],[[0,0],[0,h],[d,h],[d,0]],.45);          // left wall
+  quad([[w,0,0],[w,h,0],[w,h,d],[w,0,d]],[[0,0],[0,h],[d,h],[d,0]],.45);          // right wall
+  quad([[0,0,0],[w,0,0],[w,0,d],[0,0,d]],[[0,0],[w,0],[w,d],[0,d]],.9);           // floor
+  return new Float32Array(out);
+}
+const fmtLen=m=>project.room.units==='ft'?(m/.3048).toFixed(1)+' ft':m.toFixed(2)+' m';
+// everything the renderer and the overlay need for this frame of the 3D view
+function tiltView(){
+  const T={k:tilt.k,yaw:tilt.yaw,pitch:tilt.pitch,z:tiltZ,cone:coneOf,room:null};
+  if(project.room.show){const g=roomGeo(),E=Math.max(g.R.w,g.R.h,g.R.d)/g.fh;T.ext=E;T.fit=clamp(1.7/E,.08,1);T.pz=g.R.d/2/g.fh;T.room=roomPlanes(g,tilt.k);T.roomStep=1}
+  return tilt.cur=T;
 }
 // output point (0..1) lifted by z → screen px, the same transform the shader applies in the 3D view
 function proj3(p,z){
-  const cx=VR.x+VR.w/2,cy=VR.y+VR.h/2,{R,D,sc}=tiltCore(tilt,VR.h);
-  const X=VR.x+p[0]*VR.w-cx,Y=cy-(VR.y+p[1]*VR.h),Z=z*VR.h;
+  const cx=VR.x+VR.w/2,cy=VR.y+VR.h/2,{R,D,sc,pz}=tiltCore(tilt.cur||tilt,VR.h);
+  const X=VR.x+p[0]*VR.w-cx,Y=cy-(VR.y+p[1]*VR.h),Z=(z-pz)*VR.h;
   const r=k=>R[k][0]*X+R[k][1]*Y+R[k][2]*Z,w=1-r(2)/D;
   return [cx+sc*r(0)/w,cy-sc*r(1)/w];
 }
@@ -1484,17 +1572,37 @@ function drawOverlay(){
 function drawTiltOverlay(){
   const path=P=>{octx.beginPath();P.forEach(([x,y],k)=>k?octx.lineTo(x,y):octx.moveTo(x,y));octx.closePath()};
   octx.lineWidth=1;octx.strokeStyle='#2f3740';path([[0,0],[1,0],[1,1],[0,1]].map(p=>proj3(p,0)));octx.stroke();
+  if(project.room.show)drawRoomGuides();
   const items=project.surfaces.map((s,i)=>({s,i,z:tiltZ(s)})).sort((a,b)=>a.z-b.z);tilt.hits=[];
   octx.font='500 11px "IBM Plex Sans",sans-serif';octx.textAlign='center';octx.textBaseline='middle';
   items.forEach(({s,i,z})=>{
-    const on=selKind==='s'&&i===sel,col=PALETTE[i%PALETTE.length],poly=geometry(s).poly.map(p=>proj3(p,z));
+    const on=selKind==='s'&&i===sel,col=PALETTE[i%PALETTE.length],poly=geometry(s).poly.map(p=>surfPt(s,p));
     tilt.hits.unshift({i,poly});
     if(on){octx.setLineDash([2,4]);octx.strokeStyle=col+'77';octx.beginPath();
-      s.pts.forEach(p=>{const a=proj3(p,z),b=proj3(p,0);octx.moveTo(a[0],a[1]);octx.lineTo(b[0],b[1])});octx.stroke()}
+      s.pts.forEach(p=>{const a=surfPt(s,p),b=proj3(p,0);octx.moveTo(a[0],a[1]);octx.lineTo(b[0],b[1])});octx.stroke()}
     octx.setLineDash(s.visible?[]:[4,4]);octx.lineWidth=on?1.5:1;octx.strokeStyle=on?col:col+'88';path(poly);octx.stroke();octx.setLineDash([]);
-    const c=proj3(centroid(s.pts),z),txt=(project.surfaces.length-i)+'  '+s.name,w=octx.measureText(txt).width+12;
+    const c=surfPt(s,centroid(s.pts)),txt=(project.surfaces.length-i)+'  '+s.name,w=octx.measureText(txt).width+12;
     octx.fillStyle='rgba(0,0,0,.7)';octx.fillRect(c[0]-w/2,c[1]-9,w,18);octx.fillStyle=on?col:'#aab';octx.fillText(txt,c[0],c[1]);
   });
+}
+
+// room labels: its three dimensions, the picture's size on the wall, the projector and the cone of light to the picture
+function drawRoomGuides(){
+  const g=roomGeo(),{R}=g,k=tilt.k,P=(x,y,z)=>{const n=g.N(x,y,z);return proj3([n[0],n[1]],n[2]*k)};
+  const tag=(txt,[x,y],col='#7d8894')=>{octx.font='500 10px "IBM Plex Mono",monospace';const w=octx.measureText(txt).width+10;
+    octx.fillStyle='rgba(11,14,17,.85)';octx.fillRect(x-w/2,y-8,w,16);octx.fillStyle=col;octx.textAlign='center';octx.textBaseline='middle';octx.fillText(txt,x,y)};
+  octx.save();octx.globalAlpha=k;
+  const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+  tag(fmtLen(R.w)+' wide',mid(P(0,0,R.d),P(R.w,0,R.d)));
+  tag(fmtLen(R.d)+' deep',mid(P(R.w,0,0),P(R.w,0,R.d)));
+  tag(fmtLen(R.h)+' high',mid(P(0,0,0),P(0,R.h,0)));
+  const L=P(R.w/2,R.lensH,R.dist),C=[[0,0],[1,0],[1,1],[0,1]].map(p=>proj3(p,0));
+  octx.strokeStyle='#ffb54755';octx.lineWidth=1;octx.setLineDash([3,4]);octx.beginPath();C.forEach(c=>{octx.moveTo(L[0],L[1]);octx.lineTo(c[0],c[1])});octx.stroke();octx.setLineDash([]);
+  const F=P(R.w/2,0,R.dist);octx.strokeStyle='#ffb54766';octx.beginPath();octx.moveTo(L[0],L[1]);octx.lineTo(F[0],F[1]);octx.stroke();  // stand down to the floor
+  octx.fillStyle='#ffb547';octx.fillRect(L[0]-5,L[1]-3.5,10,7);
+  tag('PROJECTOR · '+fmtLen(R.dist),[L[0],L[1]-14],'#ffb547');
+  tag('PICTURE '+fmtLen(g.fw)+' × '+fmtLen(g.fh),[(C[0][0]+C[1][0])/2,Math.min(C[0][1],C[1][1])-12],'#ffb547');
+  octx.restore();
 }
 
 // alignment guides drawn on the projected image itself: every outline, the selected item's handles,
@@ -1820,6 +1928,7 @@ function renderProps(){
       ${rangeRow('dYaw','Turn',-80,80,1,s.yaw)}
       ${rangeRow('dPitch','Tilt',-80,80,1,s.pitch)}
       ${rangeRow('dZ','Distance',0,1,.01,s.z)}
+      ${project.room.show?`<span></span><span class="note" id="dZinfo">${distInfo(s)}</span>`:''}
       ${rangeRow('dEdge','Corner shade',0,1,.01,s.edgeShade)}
       <label>Shadow</label><label class="check"><input type="checkbox" id="dShadow"${s.castShadow?' checked':''}> Cast a shadow behind</label>
     </div>
@@ -1932,7 +2041,7 @@ function coords(){
   const H2=handlesOf(s);if(H2.length>4){el.innerHTML=`<span>${H2.length} points</span><span class="on">${selPt>=0&&H2[selPt]?'Point '+(selPt+1)+': '+f(H2[selPt]):'No point selected'}</span>`}
   else el.innerHTML=s.pts.map((p,k)=>`<span class="${k===selPt?'on':''}">${k+1}: ${f(p)}</span>`).join('');
 }
-function renderAll(){renderOutPanel();renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderLight();renderMidi()}
+function renderAll(){renderOutPanel();renderTop();renderList();renderProps();renderViewPanel();renderScenes();renderAudio();renderTempo();renderLight();renderRoom();renderMidi()}
 
 /* property events (delegated, so they survive re-renders) */
 $('props').addEventListener('input',e=>{
@@ -1958,7 +2067,7 @@ $('props').addEventListener('input',e=>{
   else if(t.id==='rBR')s.round[2]=+t.value;
   else if(t.id==='rBL')s.round[3]=+t.value;
   else if(t.id==='dYaw'||t.id==='dPitch'){s[t.id==='dYaw'?'yaw':'pitch']=+t.value;document.querySelectorAll('#faceSeg [data-face]').forEach(b=>b.classList.toggle('on',b.dataset.face===faceOf(s)))}
-  else if(t.id==='dZ')s.z=+t.value;
+  else if(t.id==='dZ'){s.z=+t.value;const el=$('dZinfo');if(el)el.textContent=distInfo(s)}
   else if(t.id==='dEdge')s.edgeShade=+t.value;
   else return;
   scheduleSave();
@@ -2159,6 +2268,34 @@ $('tQuant').addEventListener('click',e=>{const b=e.target.closest('[data-q]');if
 $('tBpm').onchange=e=>{const tp=project.tempo,t=now(),ph=tp.on?tempoPhase(t):0;tp.bpm=clamp(+e.target.value||120,30,300);TEMPO.t0=t-ph*60/tp.bpm;renderTempo();scheduleSave()};
 $('tTap').onclick=tapTempo;
 $('tSync').onclick=()=>{TEMPO.t0=now();if(!project.tempo.on){project.tempo.on=true;scheduleSave()}renderTempo()};
+
+/* room & projector panel */
+const distInfo=s=>'About '+fmtLen((1-clamp(+s.z||0,0,1))*CONE_MAX*project.room.dist)+' out from the wall';
+const RM_UNIT=()=>project.room.units==='ft'?.3048:1;
+function roomInfo(){
+  const g=roomGeo(),R=g.R,warn=[];
+  if(g.fw>R.w+1e-6)warn.push('The picture is wider than the wall.');
+  if(R.picY+g.fh>R.h+1e-6)warn.push('The picture runs past the ceiling.');
+  if(R.dist>R.d+1e-6)warn.push('The projector sits outside the room. Make the room deeper or move the projector closer.');
+  if(R.lensH>R.h)warn.push('The projector is above the ceiling.');
+  $('rmInfo').textContent='Picture on the wall: '+fmtLen(g.fw)+' × '+fmtLen(g.fh)+'.'+(warn.length?' '+warn.join(' '):'');
+  $('rmInfo').style.color=warn.length?'var(--lamp)':'';
+}
+function renderRoom(){
+  if(!project)return;const R=project.room,u=RM_UNIT();
+  $('rmShow').checked=R.show;document.querySelectorAll('#rmUnits [data-ru]').forEach(b=>b.classList.toggle('on',b.dataset.ru===R.units));
+  document.querySelectorAll('#rmGrid [data-rk]').forEach(el=>{if(document.activeElement===el)return;const k=el.dataset.rk;el.value=k==='throw'?R.throw:Math.round(R[k]/u*100)/100});
+  roomInfo();
+}
+$('roomFold').addEventListener('input',e=>{const t=e.target,R=project.room;
+  if(t.id==='rmShow'){R.show=t.checked;renderProps();scheduleSave();return}
+  const k=t.dataset.rk;if(!k||t.value==='')return;const v=+t.value;if(!isFinite(v))return;
+  R[k]=k==='throw'?v:v*RM_UNIT();project.room=normRoom(R);roomInfo();if(k==='dist')renderProps();scheduleSave()});
+$('roomFold').addEventListener('change',e=>{if(e.target.dataset.rk)renderRoom()});  // show the value as clamped once the field is left
+$('rmUnits').addEventListener('click',e=>{const b=e.target.closest('[data-ru]');if(!b)return;project.room.units=b.dataset.ru;renderRoom();renderProps();scheduleSave()});
+$('rmFill').onclick=()=>{const R=project.room;R.dist=clamp(R.w*R.throw,.2,100);project.room=normRoom(R);renderRoom();renderProps();scheduleSave();
+  toast(R.dist>R.d?'Filling the wall needs the projector '+fmtLen(R.dist)+' away, outside the room.':'Projector moved to '+fmtLen(R.dist)+' from the wall')};
+$('rmSee').onclick=()=>{if(!project.room.show){project.room.show=true;renderRoom()}if(!tilt.on)setTilt(true)};
 
 /* depth & light panel */
 const LIGHT_RANGES={lAz:'az',lEl:'el',lAmt:'amount',lAmb:'ambient',lSpeed:'speed',lShadow:'shadow',lShLen:'shadowLen'};
@@ -2438,7 +2575,7 @@ function frame(){
     $('tapDot').style.opacity=project.tempo.on?.15+.85*TEMPO.pulse:.15;
     const single=document.body.classList.contains('output'),dpr=glc.width/CW;
     editR.draw(single?outList(t):drawList(t),t,{testGrid,blackout,master:project.master,editor:!single,xray:xray&&!single,masks:single?outMasks():project.masks,
-      light:single?outLight():project.light,tilt:!single&&tilt.k>0?{k:tilt.k,yaw:tilt.yaw,pitch:tilt.pitch,z:tiltZ}:null,
+      light:single?outLight():project.light,tilt:!single&&tilt.k>0?tiltView():(tilt.cur=null),
       bg:!single&&!bgHidden?project.bg:null,view:{x:VR.x*dpr,y:VR.y*dpr,w:VR.w*dpr,h:VR.h*dpr}});
     drawOverlay();drawMeter();drawTimeline();
   }
